@@ -49,3 +49,9 @@ if ! curl --fail --silent --show-error --retry 2 https://daywish.alvis.org.cn/he
   fi
   exit 1
 fi
+ARCHIVE=""
+if [[ "$MODE" == site ]]; then ARCHIVE="$PAYLOAD"; else ARCHIVE="$SITE_PAYLOAD"; fi
+if [[ -n "$ARCHIVE" ]] && ! python3 ops/verify-website.py "$ARCHIVE"; then
+  "${SSH[@]}" "$REMOTE" "if [ -f /srv/daywish/state/previous-site.json ]; then python3 '$UPLOAD/deploy.py' rollback-site; fi"
+  exit 1
+fi
