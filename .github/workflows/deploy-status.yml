@@ -31,6 +31,7 @@ jobs:
           import json
           from pathlib import Path
           import shutil
+          from urllib.request import urlopen
           root = Path('/srv/daywish')
           if not root.is_dir():
               print('::notice title=官网目录::尚未初始化')
@@ -49,4 +50,12 @@ jobs:
               versions = [{'platform': r.get('platform'), 'version': r.get('version'), 'bytes': r.get('bytes')} for r in data.get('releases', [])]
               print('::notice title=官网下载清单::' + json.dumps(versions, ensure_ascii=True))
           print('::notice title=部署磁盘空间::剩余 ' + str(shutil.disk_usage(root).free // 1024 // 1024) + ' MB')
+          for route in ['windows/latest.yml', 'macos/appcast.xml']:
+              file = root / 'state/updates' / route
+              if file.is_file():
+                  try:
+                      with urlopen('http://127.0.0.1:8085/updates/' + route, timeout=10) as response:
+                          print('::notice title=更新源本机探测::' + route + ' HTTP ' + str(response.status))
+                  except Exception as error:
+                      print('::notice title=更新源本机探测::' + route + ' 文件已存在，但路由探测失败：' + str(error))
           PY

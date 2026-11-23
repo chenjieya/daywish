@@ -28,6 +28,10 @@ STAGE='校验官网容器配置和镜像'
 "${DOCKER[@]}" compose -f /srv/daywish/service/compose.yml run --rm --no-deps website nginx -t
 STAGE='启动官网容器'
 "${DOCKER[@]}" compose -f /srv/daywish/service/compose.yml up -d --wait
+STAGE='重载官网容器路由配置'
+# 已运行的容器不会因绑定配置文件内容变化自动重建，需显式平滑重载新增更新源路由。
+"${DOCKER[@]}" compose -f /srv/daywish/service/compose.yml exec -T website nginx -t
+"${DOCKER[@]}" compose -f /srv/daywish/service/compose.yml exec -T website nginx -s reload
 # 服务就绪后才切换首页；内网构建标识不匹配时 deploy.py 会回滚。
 STAGE='切换并验证官网静态文件'
 python3 deploy.py site site.tgz --probe http://127.0.0.1:8085

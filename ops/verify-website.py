@@ -4,10 +4,18 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 import tarfile
 import xml.etree.ElementTree as ET
 from urllib.request import Request, urlopen
 from deploy import validate_record
+
+def report_error(kind, value, trace):
+    message = str(value).replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+    print('::error title=官网公网校验失败::' + message, flush=True)
+    sys.__excepthook__(kind, value, trace)
+
+sys.excepthook = report_error
 
 parser = argparse.ArgumentParser()
 parser.add_argument('archive')
