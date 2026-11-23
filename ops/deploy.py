@@ -12,6 +12,7 @@ import shutil
 import tarfile
 import tempfile
 from urllib.request import urlopen
+from urllib.parse import quote, urlparse
 
 
 def validate_record(record):
@@ -44,6 +45,21 @@ def checksum(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def github_download_url(record):
+    """安装包来源固定为本项目的官方 Release。"""
+    tag = record.get('sourceTag', record['platform'] + '-v' + record['version'])
+    if not isinstance(tag, str) or not tag or len(tag) > 200:
+        raise ValueError('无效 GitHub Release 标签')
+    return 'https://github.com/chenjieya/daywish/releases/download/' + quote(tag, safe='') + '/' + record['file']
+
+
+def trusted_download_url(url):
+    parsed = urlparse(url)
+    if parsed.scheme != 'https' or parsed.hostname not in ('github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com') or parsed.username or parsed.password or parsed.port not in (None, 443):
+        raise ValueError('只允许 GitHub 官方 HTTPS 下载源')
+    return url
 
 
 def atomic_json(path, value):

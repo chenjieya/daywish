@@ -32,8 +32,10 @@ else
   if [[ "${DEPLOY_TRANSFER:-https}" == scp ]]; then
     "${SCP[@]}" "$PAYLOAD" "$REMOTE:$UPLOAD/package.bin"
   else
+    python3 ops/resolve-package-source.py "$RECORD" "$TMP/source-url"
+    "${SCP[@]}" "$TMP/source-url" "$REMOTE:$UPLOAD/source-url"
     "${SCP[@]}" ops/download-package.py "$REMOTE:$UPLOAD/download-package.py"
-    "${SSH[@]}" "$REMOTE" "python3 '$UPLOAD/download-package.py' '$UPLOAD/record.json' '$UPLOAD/package.bin'"
+    "${SSH[@]}" "$REMOTE" "python3 '$UPLOAD/download-package.py' '$UPLOAD/record.json' '$UPLOAD/package.bin' '$UPLOAD/source-url'"
   fi
   if [[ -n "$SITE_PAYLOAD" ]]; then
     [[ -f "$SITE_PAYLOAD" ]] || exit 2

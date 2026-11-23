@@ -3,15 +3,16 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import sys
 import tempfile
 import threading
 import time
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
-from deploy import atomic_json, checksum, validate_record
+from deploy import atomic_json, checksum, github_download_url, trusted_download_url, validate_record
 
 
 def download_ranges(url, destination, record, workers=24, chunk_size=512 * 1024, retries=5):
@@ -23,10 +24,17 @@ def download_ranges(url, destination, record, workers=24, chunk_size=512 * 1024,
     cancelled = threading.Event()
     atomic_json(progress, {'received': 0, 'expected': record['bytes'], 'status': 'downloading'})
     try:
-        with urlopen(Request(url, headers={'User-Agent': 'Daywish-Official-Download', 'Range': 'bytes=0-0'}), timeout=30) as response:
-            if urlparse(response.url).scheme != 'https' or response.status != 206 or response.headers.get('Content-Range') != f"bytes 0-0/{record['bytes']}":
-                raise ValueError('官方源没有返回预期的 HTTPS 分段响应')
-            direct_url = response.url
+        for attempt in range(retries):
+            try:
+                with urlopen(Request(url, headers={'User-Agent': 'Daywish-Official-Download', 'Range': 'bytes=0-0'}), timeout=25) as response:
+                    if urlparse(response.url).scheme != 'https' or response.status != 206 or response.headers.get('Content-Range') != f"bytes 0-0/{record['bytes']}":
+                        raise ValueError('官方源没有返回预期的 HTTPS 分段响应')
+                    direct_url = response.url
+                break
+            except Exception:
+                if attempt == retries - 1:
+                    raise
+                time.sleep(attempt + 1)
         with tempfile.TemporaryDirectory(prefix='download-', dir=destination.parent) as temporary:
             chunks = [(start, min(start + chunk_size, record['bytes']) - 1) for start in range(0, record['bytes'], chunk_size)]
 
@@ -89,14 +97,18 @@ def download_ranges(url, destination, record, workers=24, chunk_size=512 * 1024,
 
 def main():
     record = validate_record(json.loads(Path(sys.argv[1]).read_text(encoding='utf-8-sig')))
-    tag = record.get('sourceTag', record['platform'] + '-v' + record['version'])
-    if not isinstance(tag, str) or not tag or len(tag) > 200:
-        raise ValueError('无效 GitHub Release 标签')
-    url = 'https://github.com/chenjieya/daywish/releases/download/' + quote(tag, safe='') + '/' + record['file']
+    url = github_download_url(record)
+    if len(sys.argv) > 3:
+        source = Path(sys.argv[3])
+        url = trusted_download_url(source.read_text(encoding='utf-8'))
+        source.unlink()
     try:
         download_ranges(url, sys.argv[2], record)
     except Exception as error:
         reason = type(error).__name__ + ((' HTTP ' + str(error.code)) if hasattr(error, 'code') else '')
+        if hasattr(error, 'reason'):
+            detail = re.sub(r'https?://\S+', '[official-source]', str(error.reason))
+            reason += ': ' + detail.replace('\n', ' ')[:160]
         print('::error title=官方安装包下载失败::服务器无法完成 GitHub 官方 HTTPS 下载或校验：' + reason)
         raise
     print('::notice title=官方安装包已验证::HTTPS 分段下载完成，大小 ' + str(record['bytes']) + ' 字节，SHA-256 与发布记录一致')
