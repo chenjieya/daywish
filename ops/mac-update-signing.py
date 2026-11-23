@@ -17,11 +17,16 @@ def openssl(*arguments):
 
 
 def public_key(root):
+    manifest_path = root / 'state/releases.json'
+    published = json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path.exists() else {'releases': []}
+    trusted = {record['publicKey'] for record in published['releases'] if record.get('platform') == 'macos' and record.get('publicKey')}
     directory = root / 'keys'
     directory.mkdir(exist_ok=True, mode=0o700)
     directory.chmod(0o700)
     key = directory / 'sparkle-ed25519.pem'
     if not key.exists():
+        if trusted:
+            raise ValueError('已发布的 Mac 更新私钥丢失，请恢复备份；禁止自动生成新密钥使旧客户端失去更新能力')
         temporary = directory / 'sparkle-ed25519.pem.tmp'
         try:
             openssl('genpkey', '-algorithm', 'ED25519', '-out', temporary)
@@ -33,7 +38,10 @@ def public_key(root):
     der = openssl('pkey', '-in', key, '-pubout', '-outform', 'DER')
     if len(der) != 44 or der[:12].hex() != '302a300506032b6570032100':
         raise ValueError('服务器更新密钥不是 Ed25519，禁止更换已发布公钥')
-    return base64.b64encode(der[12:]).decode('ascii')
+    public = base64.b64encode(der[12:]).decode('ascii')
+    if trusted and trusted != {public}:
+        raise ValueError('Mac 更新密钥与已发布公钥不一致，禁止隐式轮换')
+    return public
 
 
 def main():

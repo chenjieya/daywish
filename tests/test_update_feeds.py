@@ -66,6 +66,18 @@ class UpdateFeedsTests(unittest.TestCase):
         result = subprocess.run(['openssl', 'pkeyutl', '-verify', '-rawin', '-pubin', '-keyform', 'DER', '-inkey', str(der), '-sigfile', str(sig), '-in', str(archive)], capture_output=True)
         self.assertNotEqual(result.returncode, 0)
 
+    @unittest.skipUnless(shutil.which('openssl'), '本机没有 OpenSSL')
+    def test_missing_published_key_cannot_be_silently_rotated(self):
+        public = signing.public_key(self.root)
+        state = self.root / 'state'
+        state.mkdir()
+        (state / 'releases.json').write_text(json.dumps({'releases': [{'platform': 'macos', 'publicKey': public}]}), encoding='utf-8')
+        key = self.root / 'keys/sparkle-ed25519.pem'
+        key.unlink()
+        with self.assertRaisesRegex(ValueError, '私钥丢失'):
+            signing.public_key(self.root)
+        self.assertFalse(key.exists())
+
 
 if __name__ == '__main__':
     unittest.main()
