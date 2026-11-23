@@ -1,0 +1,45 @@
+name: 同步手动发布的安装包到官网
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 需要同步的正式 Release 标签（同步失败可重试）
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: daywish-manual-release-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 下载并验证正式发布附件
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: node scripts/import-github-release.mjs "$RELEASE_TAG" publication
+      - name: 更新官网安装包与版本记录
+        env:
+          DEPLOY_HOST: '152.136.107.93'
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for RECORD in publication/*.record.json; do
+            FILE="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["file"])' "$RECORD")"
+            bash ops/deploy-remote.sh release "publication/$FILE" "$RECORD"
+          done

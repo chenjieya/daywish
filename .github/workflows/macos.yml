@@ -1,0 +1,15 @@
+name: 验证与构建 Mac 原生版
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 测试并构建本机架构应用
+        run: bash macos/build.command
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Daywish-macOS
+          path: macos/build/*.zip

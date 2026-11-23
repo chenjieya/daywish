@@ -1,0 +1,21 @@
+{
+  "paydays": [
+    { "today": "2026-11-23", "payday": 10, "rule": "exact", "expected": "2026-12-10" },
+    { "today": "2026-11-10", "payday": 10, "rule": "exact", "expected": "2026-11-10" },
+    { "today": "2026-02-01", "payday": 31, "rule": "exact", "expected": "2026-02-28" },
+    { "today": "2026-02-01", "payday": 0, "rule": "exact", "expected": "2026-02-28" },
+    { "today": "2026-02-14", "payday": 15, "rule": "previous", "expected": "2026-02-14" },
+    { "today": "2026-02-15", "payday": 15, "rule": "next", "expected": "2026-02-24" },
+    { "today": "2026-01-30", "payday": 1, "rule": "previous", "expected": "2026-01-30" },
+    { "today": "2026-12-31", "payday": 1, "rule": "next", "expected": "2027-01-04" },
+    { "today": "2028-01-01", "payday": 1, "rule": "previous", "expected": "2028-01-01" }
+  ],
+  "springs": [
+    { "today": "2026-02-16", "expected": "2026-02-17" },
+    { "today": "2026-02-17", "expected": "2026-02-17" },
+    { "today": "2026-02-18", "expected": "2027-02-06" },
+    { "today": "2026-11-23", "expected": "2027-02-06" },
+    { "today": "2027-02-06", "expected": "2027-02-06" },
+    { "today": "2027-02-07", "expected": "2028-01-26" }
+  ]
+}

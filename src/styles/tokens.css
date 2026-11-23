@@ -1,0 +1,12 @@
+:root {
+  font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ink: #26333d;
+  --muted: #5c6c77;
+  --accent: #637e8d;
+  --panel: #f6f8fa;
+  --line: rgba(59, 79, 91, .1);
+  --radius: 20px;
+}

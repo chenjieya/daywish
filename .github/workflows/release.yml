@@ -1,0 +1,88 @@
+name: 发布客户端并更新官网下载
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 要发布的平台（Mac 请先运行原生构建验证）
+        required: true
+        type: choice
+        options: [windows, macos]
+      notes:
+        description: 本版本更新说明（可填写多行）
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: daywish-release-${{ inputs.platform }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: ${{ inputs.platform == 'macos' && 'macos-latest' || 'windows-latest' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable && corepack prepare pnpm@10.28.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: 校验版本与更新说明
+        env:
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: |
+          node -e 'const fs=require("fs");const v=require("./package.json").version;if(!/^\d+\.\d+\.\d+$/.test(v))process.exit(1);fs.writeFileSync("release-notes.txt",process.env.RELEASE_NOTES)'
+      - run: pnpm test
+      - if: inputs.platform == 'windows'
+        run: pnpm package:win
+      - if: inputs.platform == 'macos'
+        run: bash macos/build.command
+      - name: 生成经过校验的版本记录
+        env:
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          if [[ "$PLATFORM" == windows ]]; then
+            FILE="release/Daywish-$VERSION-Windows-x64-Setup.exe"
+          else
+            FILE="macos/build/Daywish-$VERSION-macOS-$(uname -m).zip"
+          fi
+          mkdir -p publication
+          cp "$FILE" publication/
+          node scripts/make-release-record.mjs "$PLATFORM" "$FILE" publication/record.json release-notes.txt
+          cp release-notes.txt publication/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daywish-publication
+          path: publication/*
+          retention-days: 30
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: daywish-publication
+          path: publication
+      - name: 发布 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATFORM: ${{ inputs.platform }}
+        run: node scripts/publish-github.mjs
+      # GITHUB_TOKEN 创建 Release 不会再触发普通 Release 事件，故在同一流水线里直接部署。
+      - name: 同步安装包并更新官网下载信息
+        env:
+          DEPLOY_HOST: '152.136.107.93'
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="$(python3 -c 'import json;print(json.load(open("publication/record.json"))["file"])')"
+          bash ops/deploy-remote.sh release "publication/$FILE" publication/record.json
