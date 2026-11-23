@@ -36,6 +36,8 @@ def validate_record(record):
         raise ValueError('发布时间缺少时区')
     if not isinstance(record.get('notes'), list) or not all(isinstance(n, str) for n in record['notes']):
         raise ValueError('无效更新说明')
+    if 'downloadUrl' in record and record['downloadUrl'] != github_download_url(record):
+        raise ValueError('外部下载只能指向本项目的 GitHub Release')
     return record
 
 
@@ -115,17 +117,39 @@ def publish_package(root, package, record):
     manifest = json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path.exists() else {'schema': 1, 'releases': []}
     if manifest.get('schema') != 1 or not isinstance(manifest.get('releases'), list):
         raise ValueError('现有版本清单无效')
-    for prior in manifest['releases']:
+    for index, prior in enumerate(manifest['releases']):
         validate_record(prior)
         if prior['platform'] == record['platform'] and prior['version'] == record['version']:
             if any(prior[field] != record[field] for field in ('file', 'sha256', 'bytes')):
                 raise ValueError('相同平台版本已发布，禁止改写安装包')
             # 重试或手动补发 GitHub Release 时保留第一次发布时间与说明。
+            if 'downloadUrl' in prior:
+                manifest['releases'][index] = {key: value for key, value in prior.items() if key != 'downloadUrl'}
+                atomic_json(manifest_path, manifest)
             return
     # 先落安装包，再原子替换清单；官网不出现指向未上传文件的链接。
     manifest['releases'].append(record)
     atomic_json(manifest_path, manifest)
     manifest_path.parent.chmod(0o755)
+
+
+def publish_release_link(root, record):
+    """CI 已校验 Release 实际附件后，只同步官方链接，不等待服务器镜像。"""
+    record = validate_record(record)
+    record = {**record, 'downloadUrl': github_download_url(record)}
+    path = root / 'state/releases.json'
+    manifest = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {'schema': 1, 'releases': []}
+    if manifest.get('schema') != 1 or not isinstance(manifest.get('releases'), list):
+        raise ValueError('现有版本清单无效')
+    for prior in manifest['releases']:
+        validate_record(prior)
+        if prior['platform'] == record['platform'] and prior['version'] == record['version']:
+            if any(prior[key] != record[key] for key in ('file', 'sha256', 'bytes')):
+                raise ValueError('同版本安装包内容不一致')
+            return
+    manifest['releases'].append(record)
+    atomic_json(path, manifest)
+    path.parent.chmod(0o755)
 
 
 def extract_site(archive, target):
@@ -195,6 +219,8 @@ def main():
     release = commands.add_parser('release')
     release.add_argument('package')
     release.add_argument('record')
+    link = commands.add_parser('release-link')
+    link.add_argument('record')
     commands.add_parser('rollback-site')
     args = parser.parse_args()
     root = Path(args.root).resolve()
@@ -209,6 +235,9 @@ def main():
         elif args.command == 'release':
             publish_package(root, args.package, json.loads(Path(args.record).read_text(encoding='utf-8-sig')))
             print('安装包与版本清单已发布')
+        elif args.command == 'release-link':
+            publish_release_link(root, json.loads(Path(args.record).read_text(encoding='utf-8-sig')))
+            print('GitHub 官方下载链接与版本清单已发布')
         else:
             previous = json.loads((root / 'state/previous-site.json').read_text(encoding='utf-8'))['target']
             destination = (root / previous).resolve()

@@ -6,6 +6,8 @@ export interface PublishedPackage {
   sha256: string
   publishedAt: string
   notes: string[]
+  sourceTag?: string
+  downloadUrl?: string
 }
 export interface ReleaseManifest { schema: 1; releases: PublishedPackage[] }
 
@@ -25,5 +27,10 @@ export function isReleaseManifest(value: unknown): value is ReleaseManifest {
       && typeof p.sha256 === 'string' && /^[a-f0-9]{64}$/.test(p.sha256)
       && typeof p.publishedAt === 'string' && Number.isFinite(Date.parse(p.publishedAt))
       && Array.isArray(p.notes) && p.notes.every(note => typeof note === 'string')
+      && (p.downloadUrl === undefined || (typeof p.downloadUrl === 'string' && p.downloadUrl === `https://github.com/chenjieya/daywish/releases/download/${encodeURIComponent(typeof p.sourceTag === 'string' ? p.sourceTag : `${p.platform}-v${p.version}`)}/${p.file}`))
   })
+}
+
+export function packageUrl(release: PublishedPackage): string {
+  return release.downloadUrl ?? `/downloads/${release.file}`
 }

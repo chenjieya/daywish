@@ -10,7 +10,7 @@ import threading
 import unittest
 from unittest.mock import patch
 from urllib.error import URLError
-from ops.deploy import checksum, publish_package, extract_site, publish_site, validate_record, initialize_manifest, deployment_lock
+from ops.deploy import checksum, publish_package, publish_release_link, extract_site, publish_site, validate_record, initialize_manifest, deployment_lock
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'ops'))
@@ -32,6 +32,21 @@ class DeployTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             publish_package(self.root, self.payload, {**self.record, 'sha256': '0' * 64})
         self.assertFalse((self.root / 'state/releases.json').exists())
+
+    def test_official_link_does_not_claim_a_local_mirror(self):
+        publish_release_link(self.root, self.record)
+        data = json.loads((self.root / 'state/releases.json').read_text(encoding='utf-8'))
+        self.assertEqual(data['releases'][0]['downloadUrl'], 'https://github.com/chenjieya/daywish/releases/download/windows-v0.2.2/' + self.record['file'])
+        self.assertFalse((self.root / 'downloads' / self.record['file']).exists())
+        publish_release_link(self.root, self.record)
+        self.assertEqual(len(json.loads((self.root / 'state/releases.json').read_text(encoding='utf-8'))['releases']), 1)
+
+    def test_verified_mirror_replaces_official_external_link(self):
+        publish_release_link(self.root, self.record)
+        publish_package(self.root, self.payload, self.record)
+        data = json.loads((self.root / 'state/releases.json').read_text(encoding='utf-8'))
+        self.assertNotIn('downloadUrl', data['releases'][0])
+        self.assertTrue((self.root / 'downloads' / self.record['file']).exists())
 
     def test_parallel_ranges_retry_and_verify_entire_file(self):
         payload = b'content-for-package-' * 1000
@@ -108,6 +123,8 @@ class DeployTests(unittest.TestCase):
             validate_record({**self.record, 'file': '../outside.exe'})
         with self.assertRaises(ValueError):
             validate_record({**self.record, 'file': 'Daywish-9.0.0-Windows-x64-Setup.exe'})
+        with self.assertRaises(ValueError):
+            validate_record({**self.record, 'downloadUrl': 'https://evil.example/package.exe'})
 
     def test_tar_rejects_traversal_and_links(self):
         for name, link in [('../outside', False), ('link', True)]:

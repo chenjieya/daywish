@@ -44,7 +44,8 @@ if manifest.get('schema') != 1 or not isinstance(manifest.get('releases'), list)
 versions = []
 for record in manifest['releases']:
     validate_record(record)
-    with fetch('/downloads/' + record['file'], 'HEAD') as response:
+    request = Request(record['downloadUrl'], method='HEAD', headers={'User-Agent': 'Daywish-CI-Verification'}) if record.get('downloadUrl') else None
+    with (urlopen(request, timeout=30) if request else fetch('/downloads/' + record['file'], 'HEAD')) as response:
         if int(response.headers.get('Content-Length', 0)) != record['bytes']:
             raise ValueError('公网安装包大小不符')
     versions.append(record['platform'] + ' v' + record['version'])

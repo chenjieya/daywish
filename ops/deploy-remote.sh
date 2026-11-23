@@ -29,7 +29,9 @@ if [[ "$MODE" == site ]]; then
 else
   [[ -f "$RECORD" ]] || exit 2
   "${SCP[@]}" "$RECORD" "$REMOTE:$UPLOAD/record.json"
-  if [[ "${DEPLOY_TRANSFER:-https}" == scp ]]; then
+  if [[ "${DEPLOY_DELIVERY:-github}" == github ]]; then
+    printf '安装包使用 GitHub 官方 Release，先更新官网再切换下载信息。\n'
+  elif [[ "${DEPLOY_TRANSFER:-https}" == scp ]]; then
     "${SCP[@]}" "$PAYLOAD" "$REMOTE:$UPLOAD/package.bin"
   else
     python3 ops/resolve-package-source.py "$RECORD" "$TMP/source-url"
@@ -47,9 +49,14 @@ if [[ "$MODE" == site || -n "$SITE_PAYLOAD" ]]; then
   "${SCP[@]}" ops/bootstrap.sh ops/compose.yml ops/nginx-site.conf "$REMOTE:$UPLOAD/"
   "${SSH[@]}" "$REMOTE" "bash '$UPLOAD/bootstrap.sh'"
 else
-  "${SSH[@]}" "$REMOTE" "python3 '$UPLOAD/deploy.py' release '$UPLOAD/package.bin' '$UPLOAD/record.json'"
+  if [[ "${DEPLOY_DELIVERY:-github}" != github ]]; then
+    "${SSH[@]}" "$REMOTE" "python3 '$UPLOAD/deploy.py' release '$UPLOAD/package.bin' '$UPLOAD/record.json'"
+  fi
 fi
 # 不递归删除服务器路径，上传目录保留用于排障；安装包已复制到独立下载目录。
+if [[ "$MODE" == release && "${DEPLOY_DELIVERY:-github}" == github ]]; then
+  "${SSH[@]}" "$REMOTE" "python3 '$UPLOAD/deploy.py' release-link '$UPLOAD/record.json'"
+fi
 if ! curl --fail --silent --show-error --retry 2 https://daywish.alvis.org.cn/healthz; then
   if [[ "$MODE" == site || -n "$SITE_PAYLOAD" ]]; then
     "${SSH[@]}" "$REMOTE" "if [ -f /srv/daywish/state/previous-site.json ]; then python3 '$UPLOAD/deploy.py' rollback-site; fi"
