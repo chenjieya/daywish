@@ -36,6 +36,8 @@ def validate_record(record):
         raise ValueError('发布时间缺少时区')
     if not isinstance(record.get('notes'), list) or not all(isinstance(n, str) for n in record['notes']):
         raise ValueError('无效更新说明')
+    if 'sourceTag' in record:
+        github_download_url(record)
     if 'downloadUrl' in record and record['downloadUrl'] != github_download_url(record):
         raise ValueError('外部下载只能指向本项目的 GitHub Release')
     return record
