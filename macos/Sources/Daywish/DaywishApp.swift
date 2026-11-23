@@ -56,7 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let effect = NSGlassEffectView(frame: frame)
             effect.style = .clear
             effect.cornerRadius = 20
+            #if DAYWISH_MACOS27_SDK
             if #available(macOS 27.0, *) { effect.effectIsInteractive = true }
+            #endif
             effect.contentView = host
             material = effect
         } else {

@@ -8,24 +8,26 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 if ! xcrun --find swift >/dev/null 2>&1; then
-  echo "请先安装 Xcode 27 或更新版本，并选择对应的 Command Line Tools。"
+  echo "请先安装 Xcode 26 或更新版本，并选择对应的 Command Line Tools。"
   exit 1
 fi
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 SDK_MAJOR="${SDK_VERSION%%.*}"
-if [ "$SDK_MAJOR" -lt 27 ]; then
-  echo "当前 macOS SDK 为 $SDK_VERSION。交互式 Liquid Glass 需要 Xcode 27 / macOS 27 SDK。"
+if [ "$SDK_MAJOR" -lt 26 ]; then
+  echo "当前 macOS SDK 为 $SDK_VERSION。构建原生玻璃兼容分支需要 Xcode 26 / macOS 26 SDK。"
   echo "请安装新版本 Xcode，并在 Xcode 设置中选择对应的 Command Line Tools。"
   exit 1
 fi
+SWIFT_FLAGS=()
+if [ "$SDK_MAJOR" -ge 27 ]; then SWIFT_FLAGS+=(-Xswiftc -DDAYWISH_MACOS27_SDK); fi
 # 仅接收发布工作流从部署服务器获取的公开验签密钥，私钥不进入应用。
 python3 -c 'import base64,os; assert len(base64.b64decode(os.environ.get("DAYWISH_UPDATE_PUBLIC_KEY", ""), validate=True)) == 32, "缺少有效的 DAYWISH_UPDATE_PUBLIC_KEY"'
 # 构建前同步权威 JSON；SwiftPM 下载固定版本的 Sparkle 并校验官方二进制。
 mkdir -p Sources/DaywishCore/Resources
 cp ../shared/calendar.json ../shared/springs.json ../shared/date-cases.json Sources/DaywishCore/Resources/
-swift test
-swift build -c release
-BIN_PATH="$(swift build -c release --show-bin-path)"
+swift test "${SWIFT_FLAGS[@]}"
+swift build -c release "${SWIFT_FLAGS[@]}"
+BIN_PATH="$(swift build -c release "${SWIFT_FLAGS[@]}" --show-bin-path)"
 APP="$(pwd)/build/好日将至.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH/Daywish" "$APP/Contents/MacOS/Daywish"

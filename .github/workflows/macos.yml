@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   macos:
-    runs-on: xcode-27
+    runs-on: macos-26
     timeout-minutes: 25
     environment: production
     steps:

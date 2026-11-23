@@ -23,7 +23,7 @@ concurrency:
 jobs:
   package:
     environment: production
-    runs-on: ${{ (inputs.platform == 'macos' || startsWith(github.ref_name, 'macos-v')) && 'xcode-27' || 'windows-latest' }}
+    runs-on: ${{ (inputs.platform == 'macos' || startsWith(github.ref_name, 'macos-v')) && 'macos-26' || 'windows-latest' }}
     defaults:
       run:
         shell: bash
