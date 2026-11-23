@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['macos/**', 'shared/**', '.github/workflows/macos.yml', 'scripts/annotate-swift.py', 'ops/mac-update-*']
+    paths: ['macos/**', 'shared/**', '.github/workflows/macos.yml', 'scripts/annotate-swift.py', 'scripts/verify-macos-compatibility.py', 'ops/mac-update-*']
 permissions:
   contents: read
 jobs:

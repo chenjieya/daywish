@@ -16,7 +16,8 @@ final class WidgetPanel: NSPanel {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var window: WidgetPanel?
-    private var glass: NSGlassEffectView?
+    private var glass: NSView?
+    private var legacyTint: NSView?
     private var statusItem: NSStatusItem?
     private var model: AppModel?
     private var displayObserver: NSObjectProtocol?
@@ -44,15 +45,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.delegate = self
-        // 内容必须放入 contentView，确保系统把文字与控件绘制在 Liquid Glass 之上。
-        let material = NSGlassEffectView(frame: NSRect(x: 0, y: 0, width: 340, height: 236))
-        material.style = .clear
-        material.cornerRadius = 20
-        if #available(macOS 27.0, *) { material.effectIsInteractive = true }
+        let frame = NSRect(x: 0, y: 0, width: 340, height: 236)
         let host = NSHostingView(rootView: WidgetView(model: model))
-        host.frame = material.bounds
+        host.frame = frame
         host.autoresizingMask = [.width, .height]
-        material.contentView = host
+        let material: NSView
+        let legacyMaterialTest = ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] == "1" && ProcessInfo.processInfo.environment["DAYWISH_LEGACY_MATERIAL"] == "1"
+        if #available(macOS 26.0, *), !legacyMaterialTest {
+            // Liquid Glass 的内容放入 contentView，文字和控件绘制在材质之上。
+            let effect = NSGlassEffectView(frame: frame)
+            effect.style = .clear
+            effect.cornerRadius = 20
+            if #available(macOS 27.0, *) { effect.effectIsInteractive = true }
+            effect.contentView = host
+            material = effect
+        } else {
+            // Monterey 至 Sequoia 使用系统磨砂，避免加载旧系统不存在的玻璃类型。
+            let effect = NSVisualEffectView(frame: frame)
+            effect.material = .popover
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.wantsLayer = true
+            effect.layer?.cornerRadius = 20
+            effect.layer?.masksToBounds = true
+            let tint = NSView(frame: frame)
+            tint.wantsLayer = true
+            tint.autoresizingMask = [.width, .height]
+            effect.addSubview(tint)
+            effect.addSubview(host)
+            legacyTint = tint
+            material = effect
+        }
         panel.contentView = material
         glass = material
         window = panel
@@ -82,12 +105,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.orderFront(nil)
         model.softwareUpdates.start()
         if ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] == "1" {
-            guard model.softwareUpdates.canCheck else {
-                FileHandle.standardError.write(Data("error: Sparkle 更新器初始化未完成\n".utf8))
+            guard model.softwareUpdates.canCheck, panel.isVisible, !legacyMaterialTest || material is NSVisualEffectView else {
+                FileHandle.standardError.write(Data("error: 更新器、面板显示或兼容磨砂初始化未完成\n".utf8))
                 NSApp.terminate(nil)
                 return
             }
-            FileHandle.standardOutput.write(Data("DAYWISH_READY: resources, native window and Sparkle initialized\n".utf8))
+            let appearance = material is NSVisualEffectView ? "legacy-frost" : "liquid-glass"
+            FileHandle.standardOutput.write(Data("DAYWISH_READY: resources, visible panel, Sparkle and \(appearance) initialized\n".utf8))
         }
     }
     @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); model?.refresh() }
@@ -97,7 +121,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func applyPreferences() {
         guard let window, let model else { return }
         window.level = model.preferences.alwaysOnTop ? .floating : .normal
-        glass?.tintColor = model.preferences.opacity > 0 ? NSColor.white.withAlphaComponent(model.preferences.opacity / 100 * 0.2) : nil
+        let tint = model.preferences.opacity > 0 ? NSColor.white.withAlphaComponent(model.preferences.opacity / 100 * 0.2) : nil
+        if #available(macOS 26.0, *), let effect = glass as? NSGlassEffectView { effect.tintColor = tint }
+        else { legacyTint?.layer?.backgroundColor = tint?.cgColor }
         let height: CGFloat = model.panel != nil ? 490 : model.preferences.compact ? 204 : 236
         let top = window.frame.maxY
         window.setContentSize(NSSize(width: 340, height: height))

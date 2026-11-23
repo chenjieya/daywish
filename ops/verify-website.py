@@ -73,4 +73,6 @@ if any(record.get('edSignature') for record in manifest['releases'] if record['p
         record = next(record for record in manifest['releases'] if record['platform'] == 'macos' and record['version'] == version)
         if item.find('enclosure').attrib['{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature'] != record['edSignature']:
             raise ValueError('Mac 更新源签名与发布记录不一致')
+        if item.findtext('{http://www.andymatuschak.org/xml-namespaces/sparkle}minimumSystemVersion') != record.get('minimumSystemVersion', '26.0'):
+            raise ValueError('Mac 更新源最低系统要求与实际发布不一致')
 print('::notice title=官网公网验证通过::首页、构建标识、静态资源哈希已匹配；可下载版本：' + ('，'.join(versions) or '暂无，等待首次客户端发布'))

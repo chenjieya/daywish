@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")"
+export MACOSX_DEPLOYMENT_TARGET=12.0
 VERSION="${DAYWISH_VERSION:-$(awk -F'"' '/"version":/ {print $4; exit}' ../package.json)}"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "版本号必须为三段数字。"
@@ -50,24 +51,28 @@ done
 # 本地临时签名免费，不是 Developer ID 签名或 Apple 公证。
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
+python3 ../scripts/verify-macos-compatibility.py "$APP"
 if [[ "${DAYWISH_SMOKE_TEST:-0}" == 1 ]]; then
-  "$APP/Contents/MacOS/Daywish" > build/launch.log 2>&1 &
-  SMOKE_PID=$!
-  trap 'kill -TERM "$SMOKE_PID" 2>/dev/null || true' EXIT
-  READY=0
-  for attempt in $(seq 1 20); do
-    if grep -q 'DAYWISH_READY:' build/launch.log; then READY=1; break; fi
-    if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi
-    sleep 0.5
+  for LEGACY in 0 1; do
+    LOG="build/launch-$LEGACY.log"
+    DAYWISH_LEGACY_MATERIAL="$LEGACY" "$APP/Contents/MacOS/Daywish" > "$LOG" 2>&1 &
+    SMOKE_PID=$!
+    trap 'kill -TERM "$SMOKE_PID" 2>/dev/null || true' EXIT
+    READY=0
+    for attempt in $(seq 1 20); do
+      if grep -q 'DAYWISH_READY:' "$LOG"; then READY=1; break; fi
+      if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi
+      sleep 0.5
+    done
+    kill -TERM "$SMOKE_PID" 2>/dev/null || true
+    wait "$SMOKE_PID" 2>/dev/null || true
+    trap - EXIT
+    cat "$LOG"
+    if [[ "$READY" != 1 ]]; then
+      echo '::error title=Mac 启动检查失败::应用未完成资源加载与原生窗口初始化'
+      exit 1
+    fi
   done
-  kill -TERM "$SMOKE_PID" 2>/dev/null || true
-  wait "$SMOKE_PID" 2>/dev/null || true
-  trap - EXIT
-  cat build/launch.log
-  if [[ "$READY" != 1 ]]; then
-    echo '::error title=Mac 启动检查失败::应用未完成资源加载与原生窗口初始化'
-    exit 1
-  fi
 fi
 ditto -c -k --sequesterRsrc --keepParent "$APP" "build/Daywish-$VERSION-macOS-$(uname -m).zip"
 echo "构建完成：$APP"

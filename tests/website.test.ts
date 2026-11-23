@@ -20,3 +20,12 @@ test('官网接受本项目的 GitHub 正式下载链接，不接受其他来源
   assert.equal(isReleaseManifest({ schema: 1, releases: [{ ...record, downloadUrl: 'https://evil.example/file.exe' }] }), false)
   assert.equal(packageUrl(actual.releases[0]), '/downloads/' + actual.releases[0].file)
 })
+
+test('Mac 最低系统要求经过校验，历史记录可以缺省，新版可声明 Monterey', () => {
+  const record = { ...actual.releases[0], platform: 'macos', file: 'Daywish-0.2.2-macOS-arm64.zip', minimumSystemVersion: '12.0' }
+  assert(isReleaseManifest({ schema: 1, releases: [record] }))
+  for (const minimumSystemVersion of ['12.x', '12', 12, null]) {
+    assert.equal(isReleaseManifest({ schema: 1, releases: [{ ...record, minimumSystemVersion }] }), false)
+  }
+  assert.equal(isReleaseManifest({ schema: 1, releases: [{ ...actual.releases[0], minimumSystemVersion: '12.0' }] }), false)
+})

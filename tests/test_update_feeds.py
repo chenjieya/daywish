@@ -43,6 +43,24 @@ class UpdateFeedsTests(unittest.TestCase):
         publish_update_feeds(self.root)
         self.assertFalse((self.root / 'state/updates').exists())
 
+    def test_mac_minimum_system_version_is_per_release(self):
+        old = {**self.record, 'platform': 'macos', 'file': 'Daywish-0.3.0-macOS-arm64.zip', 'edSignature': base64.b64encode(b's' * 64).decode(), 'publicKey': base64.b64encode(b'p' * 32).decode()}
+        new = {**old, 'version': '0.3.3', 'file': 'Daywish-0.3.3-macOS-arm64.zip', 'minimumSystemVersion': '12.0'}
+        publish_release_link(self.root, old)
+        publish_release_link(self.root, new)
+        publish_update_feeds(self.root)
+        namespace = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+        feed = ET.parse(self.root / 'state/updates/macos/appcast.xml')
+        versions = {item.findtext(namespace + 'version'): item.findtext(namespace + 'minimumSystemVersion') for item in feed.findall('./channel/item')}
+        self.assertEqual(versions, {'0.3.3': '12.0', '0.3.0': '26.0'})
+
+    def test_invalid_minimum_system_version_rejected(self):
+        for value in ['12', '12.x', 12, None, '12.0<script>']:
+            with self.assertRaises(ValueError):
+                validate_record({**self.record, 'platform': 'macos', 'file': 'Daywish-0.3.0-macOS-arm64.zip', 'minimumSystemVersion': value})
+        with self.assertRaises(ValueError):
+            validate_record({**self.record, 'minimumSystemVersion': '12.0'})
+
     def test_malformed_signature_and_hash_rejected(self):
         for change in [{'sha512': 'bad'}, {'edSignature': 'bad', 'publicKey': 'bad'}, {'edSignature': base64.b64encode(b's' * 64).decode()}]:
             with self.assertRaises(ValueError):

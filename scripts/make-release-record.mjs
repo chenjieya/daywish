@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs'
 import { stat, readFile, writeFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { createHash, createPublicKey, verify } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 const [platform, file, output, notesFile] = process.argv.slice(2)
 if (!['windows', 'macos'].includes(platform) || !file || !output || !notesFile) throw new Error('用法：platform 安装包 输出JSON 更新说明TXT')
 const { version } = JSON.parse(await readFile('package.json', 'utf8'))
@@ -16,6 +17,7 @@ const notes = (await readFile(notesFile, 'utf8')).split(/\r?\n/).map(s => s.trim
 if (!notes.length) throw new Error('更新说明不能为空')
 const record = { platform, version, file: name, bytes: info.size, sha256: hash.digest('hex'), sha512: sha512.digest('base64'), publishedAt: new Date().toISOString(), notes }
 if (platform === 'macos') {
+  record.minimumSystemVersion = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :LSMinimumSystemVersion', 'macos/Info.plist'], { encoding: 'utf8' }).trim()
   const signed = JSON.parse(await readFile(`${file}.signature.json`, 'utf8'))
   if (signed.sha256 !== record.sha256 || signed.publicKey !== process.env.DAYWISH_UPDATE_PUBLIC_KEY) throw new Error('Mac 签名公钥或包校验值不符')
   const key = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(signed.publicKey, 'base64')]), format: 'der', type: 'spki' })

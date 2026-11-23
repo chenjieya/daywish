@@ -39,7 +39,8 @@ final class AppModel: ObservableObject {
             do { preferences = try JSONDecoder().decode(Preferences.self, from: Data(contentsOf: settingsURL)).validated() }
             catch { preferences = Preferences(); loadError = "原设置文件无法读取，已恢复默认值。" }
         } else { preferences = Preferences() }
-        preferences.launchAtLogin = SMAppService.mainApp.status == .enabled
+        if #available(macOS 13.0, *) { preferences.launchAtLogin = SMAppService.mainApp.status == .enabled }
+        else { preferences.launchAtLogin = false }
         if let bytes = try? Data(contentsOf: calendarURL) {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -129,7 +130,15 @@ final class AppModel: ObservableObject {
             try JSONEncoder().encode(preferences).write(to: settingsURL, options: .atomic)
         } catch { self.error = "设置未保存，请检查磁盘空间与目录权限。" }
     }
+    var canManageLoginItem: Bool {
+        if #available(macOS 13.0, *) { return true }
+        return false
+    }
     func setLaunchAtLogin(_ enabled: Bool) {
+        guard #available(macOS 13.0, *) else {
+            error = "macOS 12 请在“系统偏好设置 → 用户与群组 → 登录项”中添加好日将至。"
+            return
+        }
         do {
             if enabled { try SMAppService.mainApp.register() }
             else { try SMAppService.mainApp.unregister() }

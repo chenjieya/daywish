@@ -51,6 +51,8 @@ def validate_record(record):
                 raise ValueError('无效更新校验字段：' + field)
     if ('edSignature' in record) != ('publicKey' in record):
         raise ValueError('Mac 更新签名和公钥必须同时提供')
+    if 'minimumSystemVersion' in record and (record['platform'] != 'macos' or not isinstance(record['minimumSystemVersion'], str) or not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', record['minimumSystemVersion'])):
+        raise ValueError('无效 Mac 最低系统版本')
     return record
 
 
@@ -89,7 +91,8 @@ def publish_update_feeds(root):
             ET.SubElement(item, 'pubDate').text = format_datetime(datetime.fromisoformat(record['publishedAt'].replace('Z', '+00:00')))
             ET.SubElement(item, '{' + sparkle + '}version').text = record['version']
             ET.SubElement(item, '{' + sparkle + '}shortVersionString').text = record['version']
-            ET.SubElement(item, '{' + sparkle + '}minimumSystemVersion').text = '26.0'
+            # 历史包仍要求 26，不能因为新包兼容 Monterey 而把旧包错误推给旧系统。
+            ET.SubElement(item, '{' + sparkle + '}minimumSystemVersion').text = record.get('minimumSystemVersion', '26.0')
             ET.SubElement(item, 'description').text = '<br>'.join(escape(note) for note in record['notes'])
             ET.SubElement(item, 'enclosure', {'url': download(record), 'length': str(record['bytes']), 'type': 'application/octet-stream', '{' + sparkle + '}edSignature': record['edSignature']})
         path = root / 'state/updates/macos/appcast.xml'

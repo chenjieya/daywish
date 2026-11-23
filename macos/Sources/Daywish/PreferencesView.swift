@@ -18,10 +18,11 @@ struct PreferencesView: View {
                     heading("外观与窗口")
                     HStack { Text("白色衬底"); Spacer(); Text("\(Int(model.preferences.opacity))%").monospacedDigit() }
                     Slider(value: $model.preferences.opacity, in: 0...95, step: 1).accessibilityLabel("白色衬底")
-                    note("0% 不叠加白底。需要提高文字对比度时可调高；折射与高光由系统处理。")
+                    note("0% 不叠加白底。需要提高文字对比度时可调高；系统会使用可用的玻璃或磨砂材质。")
                     Toggle("始终置顶", isOn: $model.preferences.alwaysOnTop)
                     Toggle("更紧凑的间距", isOn: $model.preferences.compact)
-                    Toggle("开机启动", isOn: Binding(get: { model.preferences.launchAtLogin }, set: model.setLaunchAtLogin))
+                    Toggle("开机启动", isOn: Binding(get: { model.preferences.launchAtLogin }, set: model.setLaunchAtLogin)).disabled(!model.canManageLoginItem)
+                    if !model.canManageLoginItem { note("macOS 12 请在“系统偏好设置 → 用户与群组 → 登录项”中添加好日将至。") }
                     Divider()
                     heading("时间与日历")
                     Picker("日期使用", selection: $model.preferences.timeZone) { Text("北京时间").tag(TimeZoneMode.beijing); Text("跟随系统时区").tag(TimeZoneMode.system) }
