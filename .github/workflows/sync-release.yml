@@ -11,7 +11,7 @@ on:
   push:
     tags: ['sync-windows-v*', 'sync-macos-v*']
 permissions:
-  contents: read
+  contents: write
   actions: write
 concurrency:
   group: daywish-download-sync-${{ (startsWith(inputs.tag || github.event.release.tag_name || github.ref_name, 'macos-') || startsWith(inputs.tag || github.event.release.tag_name || github.ref_name, 'sync-macos-')) && 'macos' || 'windows' }}
@@ -63,7 +63,9 @@ jobs:
       - name: 下载并验证正式发布附件
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/import-github-release.mjs "$RELEASE_TAG" publication
+        run: |
+          node scripts/ensure-github-release.mjs "$RELEASE_TAG"
+          node scripts/import-github-release.mjs "$RELEASE_TAG" publication
       - name: 更新官网安装包与版本记录
         env:
           DEPLOY_HOST: '152.136.107.93'
