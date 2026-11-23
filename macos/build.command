@@ -18,16 +18,17 @@ if [ "$SDK_MAJOR" -lt 26 ]; then
   echo "请安装新版本 Xcode，并在 Xcode 设置中选择对应的 Command Line Tools。"
   exit 1
 fi
-SWIFT_FLAGS=()
-if [ "$SDK_MAJOR" -ge 27 ]; then SWIFT_FLAGS+=(-Xswiftc -DDAYWISH_MACOS27_SDK); fi
+# 位置参数兼容 macOS 自带 Bash 3.2 的空列表和 set -u。
+set --
+if [ "$SDK_MAJOR" -ge 27 ]; then set -- -Xswiftc -DDAYWISH_MACOS27_SDK; fi
 # 仅接收发布工作流从部署服务器获取的公开验签密钥，私钥不进入应用。
 python3 -c 'import base64,os; assert len(base64.b64decode(os.environ.get("DAYWISH_UPDATE_PUBLIC_KEY", ""), validate=True)) == 32, "缺少有效的 DAYWISH_UPDATE_PUBLIC_KEY"'
 # 构建前同步权威 JSON；SwiftPM 下载固定版本的 Sparkle 并校验官方二进制。
 mkdir -p Sources/DaywishCore/Resources
 cp ../shared/calendar.json ../shared/springs.json ../shared/date-cases.json Sources/DaywishCore/Resources/
-swift test "${SWIFT_FLAGS[@]}"
-swift build -c release "${SWIFT_FLAGS[@]}"
-BIN_PATH="$(swift build -c release "${SWIFT_FLAGS[@]}" --show-bin-path)"
+swift test "$@"
+swift build -c release "$@"
+BIN_PATH="$(swift build -c release "$@" --show-bin-path)"
 APP="$(pwd)/build/好日将至.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH/Daywish" "$APP/Contents/MacOS/Daywish"
