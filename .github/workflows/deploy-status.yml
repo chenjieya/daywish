@@ -34,7 +34,7 @@ jobs:
           if not root.is_dir():
               print('::notice title=官网目录::尚未初始化')
               raise SystemExit(0)
-          files = list((root / 'incoming').glob('*/package.bin'))
+          files = list((root / 'incoming').glob('*/package.bin*'))
           if files:
               latest = max(files, key=lambda p: p.stat().st_mtime)
               print('::notice title=安装包上传进度::最近安装包已写入 ' + str(latest.stat().st_size) + ' 字节')
