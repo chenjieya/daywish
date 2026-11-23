@@ -29,6 +29,8 @@ struct PreferencesView: View {
                     note("每年检查；9 月起若次年安排未公布，每周重试。仅更新数据，不重装软件。")
                     HStack(alignment: .top) { Text(model.calendarMessage).font(.system(size: 9)).foregroundColor(muted); Spacer(minLength: 8); Button(model.checkingCalendar ? "正在检查…" : "立即检查") { model.checkUpdates(force: true) }.font(.system(size: 10)).disabled(model.checkingCalendar) }.padding(9).background(accent.opacity(0.08)).cornerRadius(7)
                     note("放假安排以国务院通知为准。春节使用大陆历表。联网失败继续使用本地日历，不上传个人设置。")
+                    Divider()
+                    SoftwareUpdateSettings(updater: model.softwareUpdates)
                 }.font(.system(size: 11)).toggleStyle(.switch).controlSize(.small)
             }
             Button { model.flush(); model.panel = nil } label: { Text("完成").font(.system(size: 11)).frame(maxWidth: .infinity).padding(9).background(accent).foregroundColor(.white).cornerRadius(8) }.keyboardShortcut(.defaultAction)

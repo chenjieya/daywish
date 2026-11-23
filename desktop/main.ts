@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { normalizeSettings } from '../src/types/settings.js'
 import { getCalendarUpdate } from '../server/calendar-service.js'
 import { clientSize, isViewMode, type ViewMode } from '../src/types/window.js'
+import { AppUpdater } from './app-updater.js'
+import electronUpdater from 'electron-updater'
+import { isAppUpdateAction } from '../src/types/app-update.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 if (process.env.DAYWISH_USER_DATA) app.setPath('userData', process.env.DAYWISH_USER_DATA)
@@ -24,6 +27,8 @@ let writes: Promise<void> = Promise.resolve()
 let settingsQueue: Promise<unknown> = Promise.resolve()
 const devUrl = !app.isPackaged ? process.env.DAYWISH_DEV_URL : undefined
 let material = '半透明玻璃'
+let softwareUpdater: AppUpdater | undefined
+let installOnQuit = false
 
 function save(): Promise<void> {
   const content = JSON.stringify({ appearanceVersion: 2, settings, position }, null, 2)
@@ -58,7 +63,15 @@ async function finishQuit(): Promise<void> {
     const [x = 0, y = 0] = win.getPosition()
     position = currentView === 'panel' && dashboardPosition ? dashboardPosition : { x, y }
   }
-  await save().catch(error => console.error('退出时无法保存设置', error))
+  try { await save() } catch (error) {
+    console.error('退出时无法保存设置', error)
+    if (installOnQuit) {
+      quitting = false; quitRequested = false; installOnQuit = false
+      win?.webContents.send('storage-error', '更新前无法保存设置')
+      return
+    }
+  }
+  if (installOnQuit && softwareUpdater) { softwareUpdater.install(); return }
   app.quit()
 }
 function applySettings(): void {
@@ -91,6 +104,7 @@ function trayMenu(): void {
   tray?.setContextMenu(Menu.buildFromTemplate([
     { label: '打开好日将至', click: show },
     { label: '设置', click: () => { show(); win?.webContents.send('open-settings') } },
+    { label: '检查软件更新…', click: () => { show(); win?.webContents.send('open-settings'); void softwareUpdater?.check(true) } },
     { type: 'separator' },
     { label: '退出好日将至', click: () => app.quit() },
   ]))
@@ -161,6 +175,21 @@ else {
     // 开机启动以操作系统实际状态为准，开发模式不可注册开发工具路径。
     if (app.isPackaged) settings.launchAtLogin = app.getLoginItemSettings().openAtLogin
     const state = () => ({ settings, native: true, material, loadError, canLaunchAtLogin: app.isPackaged })
+    softwareUpdater = new AppUpdater(new electronUpdater.NsisUpdater(), app.getVersion(), app.isPackaged, update => {
+      if (win && !win.webContents.isDestroyed()) win.webContents.send('app-update-state', update)
+    }, () => { quitting = false; quitRequested = false; installOnQuit = false })
+    const trustedWindow = (event: Electron.IpcMainInvokeEvent) => {
+      if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('无效更新请求来源')
+    }
+    ipcMain.handle('read-app-update', event => { trustedWindow(event); return softwareUpdater?.snapshot() })
+    ipcMain.handle('app-update-action', async (event, action: unknown) => {
+      trustedWindow(event)
+      if (!isAppUpdateAction(action) || !softwareUpdater) throw new Error('无效更新操作')
+      if (action !== 'install') { await softwareUpdater.action(action); return }
+      if (softwareUpdater.snapshot().phase !== 'ready') throw new Error('更新尚未准备好')
+      installOnQuit = true
+      app.quit()
+    })
     ipcMain.handle('read-state', () => state())
     ipcMain.handle('set-view-mode', (event, mode: unknown) => {
       if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame || !isViewMode(mode)) throw new Error('无效窗口视图')
@@ -189,6 +218,7 @@ else {
         settings = next
         try { await save() } catch (error) { settings = old; throw error }
         applySettings()
+        if (next.autoCheckAppUpdates !== old.autoCheckAppUpdates) softwareUpdater?.configure(next.autoCheckAppUpdates)
         loadError = false
         return settings
       })
@@ -203,7 +233,8 @@ else {
       if (action === 'quit-ready' && quitRequested) void finishQuit()
     })
     createWindow()
-    powerMonitor.on('resume', () => win?.webContents.send('refresh-date'))
+    softwareUpdater.configure(settings.autoCheckAppUpdates)
+    powerMonitor.on('resume', () => { win?.webContents.send('refresh-date'); void softwareUpdater?.check(false) })
     screen.on('display-removed', () => restorePosition())
     screen.on('display-metrics-changed', () => restorePosition())
   })
@@ -217,6 +248,6 @@ else {
     win.webContents.send('prepare-quit')
     quitTimer = setTimeout(() => { void finishQuit() }, 1500)
   })
-  app.on('will-quit', () => tray?.destroy())
+  app.on('will-quit', () => { softwareUpdater?.dispose(); tray?.destroy() })
   app.on('window-all-closed', () => { if (quitting) app.quit() })
 }

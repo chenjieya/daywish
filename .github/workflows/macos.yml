@@ -3,15 +3,23 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['macos/**', 'shared/**', '.github/workflows/macos.yml', 'scripts/annotate-swift.py']
+    paths: ['macos/**', 'shared/**', '.github/workflows/macos.yml', 'scripts/annotate-swift.py', 'ops/mac-update-*']
 permissions:
   contents: read
 jobs:
   macos:
     runs-on: xcode-27
     timeout-minutes: 25
+    environment: production
     steps:
       - uses: actions/checkout@v4
+      - name: 准备 Mac 更新公钥
+        shell: bash
+        env:
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: bash ops/mac-update-remote.sh prepare
       - name: 检查构建环境
         run: |
           sw_vers

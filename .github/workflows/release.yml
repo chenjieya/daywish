@@ -22,6 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
+    environment: production
     runs-on: ${{ (inputs.platform == 'macos' || startsWith(github.ref_name, 'macos-v')) && 'xcode-27' || 'windows-latest' }}
     defaults:
       run:
@@ -50,6 +51,14 @@ jobs:
           fs.writeFileSync('release-notes.txt', notes)
           NODE
       - run: pnpm test
+      - run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: 准备 Mac 更新公钥
+        if: env.RELEASE_PLATFORM == 'macos'
+        env:
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: bash ops/mac-update-remote.sh prepare
       - if: env.RELEASE_PLATFORM == 'windows'
         run: pnpm package:win
       - if: env.RELEASE_PLATFORM == 'macos'
@@ -62,6 +71,15 @@ jobs:
           set -e
           python3 scripts/annotate-swift.py macos-build.log
           exit "$RESULT"
+      - name: 签名 Mac 更新包
+        if: env.RELEASE_PLATFORM == 'macos'
+        env:
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          bash ops/mac-update-remote.sh sign "macos/build/Daywish-$VERSION-macOS-$(uname -m).zip"
       - name: 构建随客户端一起发布的官网
         run: |
           pnpm site:build

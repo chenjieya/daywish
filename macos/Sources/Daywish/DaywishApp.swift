@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "打开好日将至", action: #selector(showWindow), keyEquivalent: "")
         menu.addItem(withTitle: "偏好设置…", action: #selector(openSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: "检查软件更新…", action: #selector(checkSoftwareUpdates), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "退出好日将至", action: #selector(quit), keyEquivalent: "q")
         for entry in menu.items { entry.target = self }
@@ -78,12 +79,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             Task { @MainActor in self?.keepOnScreen() }
         }
         showWindow()
+        model.softwareUpdates.start()
         if ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] == "1" {
             FileHandle.standardOutput.write(Data("DAYWISH_READY: resources and native window initialized\n".utf8))
         }
     }
     @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); model?.refresh() }
     @objc private func openSettings() { model?.panel = "settings"; showWindow() }
+    @objc private func checkSoftwareUpdates() { model?.softwareUpdates.check() }
     @objc private func quit() { NSApp.terminate(nil) }
     private func applyPreferences() {
         guard let window, let model else { return }

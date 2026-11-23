@@ -5,6 +5,7 @@ import ServiceManagement
 
 @MainActor
 final class AppModel: ObservableObject {
+    let softwareUpdates = SoftwareUpdater()
     @Published var preferences: Preferences { didSet { refresh(); onPreferencesChanged?(); scheduleSave() } }
     @Published var today = DateEngine.localToday()
     @Published var payday: Countdown?

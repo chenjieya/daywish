@@ -1,6 +1,7 @@
 import type { Settings } from './settings'
 import type { CalendarUpdate } from './calendar'
 import type { ViewMode } from './window'
+import type { AppUpdateAction, AppUpdateState } from './app-update'
 export interface NativeState {
   settings: Settings; native: boolean; material: string; loadError: boolean; canLaunchAtLogin: boolean
 }
@@ -10,6 +11,9 @@ declare global {
       readState(): Promise<NativeState>
       saveSettings(settings: Settings): Promise<Settings>
       checkCalendar(year: number): Promise<CalendarUpdate>
+      readAppUpdate(): Promise<AppUpdateState>
+      appUpdateAction(action: AppUpdateAction): Promise<void>
+      onAppUpdate(callback: (state: AppUpdateState) => void): () => void
       setViewMode(mode: ViewMode): Promise<{ width: number; height: number }>
       windowAction(action: 'hide' | 'minimize' | 'quit' | 'quit-ready'): void
       on(event: 'open-settings' | 'refresh-date' | 'storage-error' | 'prepare-quit', callback: () => void): () => void

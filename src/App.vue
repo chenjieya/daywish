@@ -7,9 +7,11 @@ import CountdownRow from './components/CountdownRow.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import GlassSurface from './components/GlassSurface.vue'
 import { viewMode, windowLayout } from './types/window'
+import { useAppUpdates } from './hooks/useAppUpdates'
 
 const app = useDaywish()
 const { settings, loading, error, material, native, canLaunchAtLogin, payday, holiday, spring, upcoming, dateLabel, data, persist, progress, zoneLabel, calendarStatus, checking, checkUpdates } = app
+const { appUpdate, appUpdateAction } = useAppUpdates(persist)
 const panel = ref<'settings' | 'holidays' | null>(null)
 const panelElement = ref<HTMLElement>()
 const trigger = ref<HTMLElement | null>(null)
@@ -71,7 +73,7 @@ async function hide() {
         <footer class="widget-footer"><span>{{ zoneLabel }}<span class="footer-dot">·</span>{{ dateLabel }}</span><button class="update-indicator" :title="calendarStatus.message" aria-label="查看日历数据与更新" @click="openPanel('settings')"><span :class="['status-dot', { offline: calendarStatus.failed, checking }]"></span>{{ checking ? '检查中' : '日历' }}</button></footer>
       </div>
       <div v-if="panel" ref="panelElement" class="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title">
-        <SettingsPanel v-if="panel === 'settings'" v-model="settings" :frosted="!macPreview" :native="native" :can-launch-at-login="canLaunchAtLogin" :material="material" :calendar-status="calendarStatus" :checking="checking" @check-updates="checkUpdates(true)" @close="closePanel" />
+        <SettingsPanel v-if="panel === 'settings'" v-model="settings" :frosted="!macPreview" :native="native" :can-launch-at-login="canLaunchAtLogin" :material="material" :calendar-status="calendarStatus" :checking="checking" :app-update="appUpdate" @app-update-action="appUpdateAction" @check-updates="checkUpdates(true)" @close="closePanel" />
         <template v-else>
           <header class="panel-heading"><h2 id="panel-title">节假日安排</h2><button class="icon-button" aria-label="关闭假期列表" @click="closePanel"><AppIcon name="close" :size="16" /></button></header>
           <div class="panel-scroll"><p class="field-help">中国大陆官方放假安排，普通周末不作为节假日。</p><div v-for="item in upcoming" :key="item.start" class="holiday-list-item"><div><h3>{{ item.name }}</h3><p>{{ item.start.slice(0, 4) }}年 {{ formatDate(item.start) }}—{{ formatDate(item.end) }}</p></div><span>{{ daysBetween(item.start, item.end) + 1 }} 天</span></div><p v-if="!upcoming.length" class="field-help">尚无后续假期安排，请检查日历更新。</p><p class="field-help data-note">已载入 {{ yearRange }} 年放假安排。春节按大陆历表中的正月初一计算。</p></div>

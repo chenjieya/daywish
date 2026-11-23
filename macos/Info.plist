@@ -13,4 +13,11 @@
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>SUFeedURL</key><string>https://daywish.alvis.org.cn/updates/macos/appcast.xml</string>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUAutomaticallyUpdate</key><false/>
+  <key>SUAllowsAutomaticUpdates</key><false/>
+  <key>SUUpdateCheckInterval</key><integer>86400</integer>
+  <key>SUPromptUserOnFirstLaunch</key><false/>
+  <key>SUVerifyUpdateBeforeExtraction</key><true/>
 </dict></plist>

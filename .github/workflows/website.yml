@@ -34,7 +34,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@10.28.0 --activate
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm test
-      - run: python3 -m unittest discover -s tests -p 'test_deploy.py'
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
       - run: pnpm site:build
       - run: tar -czf daywish-site.tgz -C website-dist .
       - uses: actions/upload-artifact@v4

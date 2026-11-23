@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import tarfile
+import xml.etree.ElementTree as ET
 from urllib.request import Request, urlopen
 from deploy import validate_record
 
@@ -49,4 +50,19 @@ for record in manifest['releases']:
         if int(response.headers.get('Content-Length', 0)) != record['bytes']:
             raise ValueError('公网安装包大小不符')
     versions.append(record['platform'] + ' v' + record['version'])
+latest_windows = sorted((record for record in manifest['releases'] if record['platform'] == 'windows' and 'sha512' in record), key=lambda record: tuple(map(int, record['version'].split('.'))), reverse=True)
+if latest_windows:
+    with fetch('/updates/windows/latest.yml') as response:
+        feed = json.load(response)
+    latest = latest_windows[0]
+    if feed['version'] != latest['version'] or feed['files'][0]['sha512'] != latest['sha512']:
+        raise ValueError('Windows 更新源与实际发布不一致')
+if any(record.get('edSignature') for record in manifest['releases'] if record['platform'] == 'macos'):
+    with fetch('/updates/macos/appcast.xml') as response:
+        feed = ET.fromstring(response.read())
+    for item in feed.findall('./channel/item'):
+        version = item.findtext('{http://www.andymatuschak.org/xml-namespaces/sparkle}version')
+        record = next(record for record in manifest['releases'] if record['platform'] == 'macos' and record['version'] == version)
+        if item.find('enclosure').attrib['{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature'] != record['edSignature']:
+            raise ValueError('Mac 更新源签名与发布记录不一致')
 print('::notice title=官网公网验证通过::首页、构建标识、静态资源哈希已匹配；可下载版本：' + ('，'.join(versions) or '暂无，等待首次客户端发布'))

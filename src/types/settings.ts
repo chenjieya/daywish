@@ -13,11 +13,12 @@ export interface Settings {
   compact: boolean
   timeZone: TimeZoneMode
   autoUpdate: boolean
+  autoCheckAppUpdates: boolean
 }
 
 export const defaultSettings: Settings = {
   payday: 10, paydayRule: 'exact', opacity: 0, frostOpacity: 84, theme: 'white',
-  alwaysOnTop: false, launchAtLogin: false, compact: false, timeZone: 'beijing', autoUpdate: true,
+  alwaysOnTop: false, launchAtLogin: false, compact: false, timeZone: 'beijing', autoUpdate: true, autoCheckAppUpdates: true,
 }
 
 /** IPC 和本地文件均是不可信输入；逐字段校验，不展开任意对象。 */
@@ -31,5 +32,6 @@ export function normalizeSettings(value: unknown): Settings {
     theme: 'white',
     alwaysOnTop: v.alwaysOnTop === true, launchAtLogin: v.launchAtLogin === true, compact: v.compact === true,
     timeZone: v.timeZone === 'system' ? 'system' : 'beijing', autoUpdate: v.autoUpdate !== false,
+    autoCheckAppUpdates: v.autoCheckAppUpdates !== false,
   }
 }

@@ -73,6 +73,10 @@ h1, h2, h3, p { margin: 0; }
 .update-box { margin: 9px 0; background: #e9eff28c; border-radius: 7px; padding: 9px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .update-box p { font-size: 9px; color: #758690; line-height: 1.8; }
 .text-button { color: #536f80; padding: 0; background: transparent; font-size: 10px; white-space: nowrap; line-height: 1.8; }
+.app-update-box>div { min-width: 0; }
+.app-download { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 9px; }
+.app-download progress { flex: 1; min-width: 0; height: 5px; accent-color: #6c8b9e; }
+.app-release-notes { margin: 8px 0 0; padding-left: 15px; color: var(--muted); font-size: 9px; line-height: 1.8; overflow-wrap: anywhere; }
 .primary-button { background: #7b94a3; color: #fff; border-radius: 8px; padding: 9px; margin-top: 14px; font-size: 11px; letter-spacing: 1px; flex-shrink: 0; }
 .primary-button:hover { background: #6f8898; }
 .holiday-list-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--line); gap: 8px; }

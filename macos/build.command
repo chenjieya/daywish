@@ -17,7 +17,9 @@ if [ "$SDK_MAJOR" -lt 27 ]; then
   echo "请安装新版本 Xcode，并在 Xcode 设置中选择对应的 Command Line Tools。"
   exit 1
 fi
-# 构建前直接同步权威 JSON，无须安装 Node 或任何第三方依赖。
+# 仅接收发布工作流从部署服务器获取的公开验签密钥，私钥不进入应用。
+python3 -c 'import base64,os; assert len(base64.b64decode(os.environ.get("DAYWISH_UPDATE_PUBLIC_KEY", ""), validate=True)) == 32, "缺少有效的 DAYWISH_UPDATE_PUBLIC_KEY"'
+# 构建前同步权威 JSON；SwiftPM 下载固定版本的 Sparkle 并校验官方二进制。
 mkdir -p Sources/DaywishCore/Resources
 cp ../shared/calendar.json ../shared/springs.json ../shared/date-cases.json Sources/DaywishCore/Resources/
 swift test
@@ -29,6 +31,11 @@ cp "$BIN_PATH/Daywish" "$APP/Contents/MacOS/Daywish"
 cp Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $DAYWISH_UPDATE_PUBLIC_KEY" "$APP/Contents/Info.plist"
+FRAMEWORK="$(find .build/artifacts -type d -name Sparkle.framework -print -quit)"
+[[ -n "$FRAMEWORK" ]] || { echo '::error::未找到 Sparkle.framework'; exit 1; }
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
 ICONSET="$(pwd)/build/Daywish.iconset"
 mkdir -p "$ICONSET"
 for size in 16 32 128 256 512; do

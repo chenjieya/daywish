@@ -2,8 +2,9 @@
 import type { Settings } from '../types/settings'
 import type { UpdateStatus } from '../types/calendar'
 import AppIcon from './AppIcon.vue'
-defineProps<{ modelValue: Settings; frosted: boolean; native: boolean; canLaunchAtLogin: boolean; material: string; calendarStatus: UpdateStatus; checking: boolean }>()
-const emit = defineEmits<{ 'update:modelValue': [value: Settings]; close: []; 'check-updates': [] }>()
+import type { AppUpdateAction, AppUpdateState } from '../types/app-update'
+defineProps<{ modelValue: Settings; frosted: boolean; native: boolean; canLaunchAtLogin: boolean; material: string; calendarStatus: UpdateStatus; checking: boolean; appUpdate: AppUpdateState }>()
+const emit = defineEmits<{ 'update:modelValue': [value: Settings]; close: []; 'check-updates': []; 'app-update-action': [action: AppUpdateAction] }>()
 function update<K extends keyof Settings>(settings: Settings, key: K, value: Settings[K]) { emit('update:modelValue', { ...settings, [key]: value }) }
 </script>
 <template>
@@ -36,6 +37,18 @@ function update<K extends keyof Settings>(settings: Settings, key: K, value: Set
       <p class="field-help">每年检查；9 月起若次年安排未公布，每周重试。仅更新数据，不重装软件。</p>
       <div class="update-box"><p role="status">{{ calendarStatus.message }}</p><button class="text-button" :disabled="checking" @click="emit('check-updates')">{{ checking ? '正在检查…' : '立即检查' }}</button></div>
       <p class="field-help">放假安排以国务院通知为准。春节使用紫金山天文台和大陆政务公开资料。联网失败继续使用本地日历。</p>
+    </section>
+    <section class="settings-section"><h3>软件更新 · v{{ appUpdate.currentVersion }}</h3>
+      <label class="field"><span>自动检查新版本</span><input type="checkbox" role="switch" :checked="modelValue.autoCheckAppUpdates" @change="update(modelValue, 'autoCheckAppUpdates', ($event.target as HTMLInputElement).checked)" /></label>
+      <div class="update-box app-update-box" aria-live="polite">
+        <div><p>{{ appUpdate.message }}</p><p v-if="appUpdate.version">新版本 v{{ appUpdate.version }}</p></div>
+        <button v-if="appUpdate.phase === 'available'" class="text-button" @click="emit('app-update-action', 'download')">下载更新</button>
+        <button v-else-if="appUpdate.phase === 'ready'" class="text-button" @click="emit('app-update-action', 'install')">重启并更新</button>
+        <button v-else class="text-button" :disabled="['disabled', 'checking', 'downloading', 'installing'].includes(appUpdate.phase)" @click="emit('app-update-action', 'check')">{{ appUpdate.phase === 'checking' ? '检查中…' : appUpdate.phase === 'error' ? '重新检查' : '检查新版本' }}</button>
+      </div>
+      <div v-if="appUpdate.phase === 'downloading'" class="app-download"><progress max="100" :value="appUpdate.percent" aria-label="软件更新下载进度"></progress><span>{{ Math.floor(appUpdate.percent) }}%</span></div>
+      <ul v-if="appUpdate.notes.length" class="app-release-notes"><li v-for="(note, index) in appUpdate.notes" :key="index">{{ note }}</li></ul>
+      <p class="field-help">每天自动检查一次。下载和重启由你确认，工资日、外观和窗口位置会保留。</p>
     </section>
   </div>
   <button class="primary-button" @click="emit('close')">完成</button>

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """官网静态产物与安装包发布；只使用 Python 标准库，版本切换保留回滚目录。"""
 import argparse
+import base64
+from email.utils import format_datetime
+from html import escape
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
@@ -11,6 +14,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+import xml.etree.ElementTree as ET
 from urllib.request import urlopen
 from urllib.parse import quote, urlparse
 
@@ -40,7 +44,63 @@ def validate_record(record):
         github_download_url(record)
     if 'downloadUrl' in record and record['downloadUrl'] != github_download_url(record):
         raise ValueError('外部下载只能指向本项目的 GitHub Release')
+    for field, size in [('sha512', 64), ('edSignature', 64), ('publicKey', 32)]:
+        if field in record:
+            value = record[field]
+            if not isinstance(value, str) or len(base64.b64decode(value, validate=True)) != size:
+                raise ValueError('无效更新校验字段：' + field)
+    if ('edSignature' in record) != ('publicKey' in record):
+        raise ValueError('Mac 更新签名和公钥必须同时提供')
     return record
+
+
+def publish_update_feeds(root):
+    """从真实发布记录生成两端更新源；旧版缺少更新校验字段时不冒充可更新版本。"""
+    manifest_path = root / 'state/releases.json'
+    if not manifest_path.exists():
+        return
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    records = [validate_record(record) for record in manifest['releases']]
+    records.sort(key=lambda record: tuple(map(int, record['version'].split('.'))), reverse=True)
+
+    def download(record):
+        return record.get('downloadUrl') or 'https://daywish.alvis.org.cn/downloads/' + record['file']
+
+    windows = next((record for record in records if record['platform'] == 'windows' and 'sha512' in record), None)
+    if windows:
+        url = download(windows)
+        # JSON 是 YAML 的子集，electron-updater 可直接读取；避免额外 YAML 依赖。
+        atomic_json(root / 'state/updates/windows/latest.yml', {
+            'version': windows['version'], 'files': [{'url': url, 'sha512': windows['sha512'], 'size': windows['bytes']}],
+            'path': url, 'sha512': windows['sha512'], 'releaseDate': windows['publishedAt'],
+            'releaseNotes': '\n'.join(windows['notes']),
+        })
+    signed = [record for record in records if record['platform'] == 'macos' and 'edSignature' in record]
+    if signed:
+        sparkle = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
+        ET.register_namespace('sparkle', sparkle)
+        rss = ET.Element('rss', {'version': '2.0'})
+        channel = ET.SubElement(rss, 'channel')
+        ET.SubElement(channel, 'title').text = '好日将至 Mac 更新'
+        ET.SubElement(channel, 'link').text = 'https://daywish.alvis.org.cn/'
+        for record in signed:
+            item = ET.SubElement(channel, 'item')
+            ET.SubElement(item, 'title').text = '好日将至 v' + record['version']
+            ET.SubElement(item, 'pubDate').text = format_datetime(datetime.fromisoformat(record['publishedAt'].replace('Z', '+00:00')))
+            ET.SubElement(item, '{' + sparkle + '}version').text = record['version']
+            ET.SubElement(item, '{' + sparkle + '}shortVersionString').text = record['version']
+            ET.SubElement(item, '{' + sparkle + '}minimumSystemVersion').text = '26.0'
+            ET.SubElement(item, 'description').text = '<br>'.join(escape(note) for note in record['notes'])
+            ET.SubElement(item, 'enclosure', {'url': download(record), 'length': str(record['bytes']), 'type': 'application/octet-stream', '{' + sparkle + '}edSignature': record['edSignature']})
+        path = root / 'state/updates/macos/appcast.xml'
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+        temporary = path.with_suffix('.xml.tmp')
+        ET.ElementTree(rss).write(temporary, encoding='utf-8', xml_declaration=True)
+        temporary.chmod(0o644)
+        os.replace(temporary, path)
+    for directory in [root / 'state/updates', root / 'state/updates/windows', root / 'state/updates/macos']:
+        if directory.exists():
+            directory.chmod(0o755)
 
 
 def checksum(path):
@@ -236,9 +296,11 @@ def main():
             print('站点已切换：' + publish_site(root, args.archive, args.probe))
         elif args.command == 'release':
             publish_package(root, args.package, json.loads(Path(args.record).read_text(encoding='utf-8-sig')))
+            publish_update_feeds(root)
             print('安装包与版本清单已发布')
         elif args.command == 'release-link':
             publish_release_link(root, json.loads(Path(args.record).read_text(encoding='utf-8-sig')))
+            publish_update_feeds(root)
             print('GitHub 官方下载链接与版本清单已发布')
         else:
             previous = json.loads((root / 'state/previous-site.json').read_text(encoding='utf-8'))['target']

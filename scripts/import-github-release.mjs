@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
-import { createHash } from 'node:crypto'
+import { createHash, createPublicKey, verify } from 'node:crypto'
 import { join } from 'node:path'
 
 const [tag, directory = 'publication'] = process.argv.slice(2)
@@ -26,12 +26,19 @@ for (const asset of assets) {
   const platform = asset.name.includes('-Windows-') ? 'windows' : 'macos'
   const version = /^Daywish-(\d+\.\d+\.\d+)-/.exec(asset.name)[1]
   const digest = createHash('sha256')
-  for await (const chunk of createReadStream(file)) digest.update(chunk)
+  const fullDigest = createHash('sha512')
+  for await (const chunk of createReadStream(file)) { digest.update(chunk); fullDigest.update(chunk) }
   const sha256 = digest.digest('hex'), bytes = (await stat(file)).size
+  const sha512 = fullDigest.digest('base64')
   if (bytes !== asset.size) throw new Error('下载文件大小与 GitHub 元数据不符')
   let record
   if (existing?.file === asset.name) {
     if (existing.sha256 !== sha256 || existing.bytes !== bytes || existing.version !== version || existing.platform !== platform) throw new Error('GitHub 版本记录与实际安装包不符')
+    if (existing.sha512 && existing.sha512 !== sha512) throw new Error('更新包 SHA-512 不符')
+    if (existing.edSignature) {
+      const key = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(existing.publicKey, 'base64')]), format: 'der', type: 'spki' })
+      if (!verify(null, await readFile(file), key, Buffer.from(existing.edSignature, 'base64'))) throw new Error('Mac 更新包签名不符')
+    }
     record = existing
   } else {
     record = { platform, version, file: asset.name, bytes, sha256, publishedAt: release.publishedAt, notes: release.body.split(/\r?\n/).map(s => s.replace(/^[-*#\s]+/, '').trim()).filter(Boolean) }
