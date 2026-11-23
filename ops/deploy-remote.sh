@@ -21,7 +21,7 @@ printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$TMP/known_hosts"
 SSH=(ssh -i "$TMP/key" -p "$PORT" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$TMP/known_hosts")
 SCP=(scp -i "$TMP/key" -P "$PORT" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$TMP/known_hosts")
 REMOTE="$USER_NAME@$HOST"
-UPLOAD="$("${SSH[@]}" "$REMOTE" 'if [ ! -d /srv/daywish ]; then sudo -n install -d -m 755 -o "$(id -un)" -g "$(id -gn)" /srv/daywish; fi; test -w /srv/daywish || exit 1; mkdir -p /srv/daywish/incoming && mktemp -d /srv/daywish/incoming/upload.XXXXXXXX')"
+UPLOAD="$("${SSH[@]}" "$REMOTE" 'if [ ! -d /srv/daywish ]; then sudo -n install -d -m 755 -o "$(id -un)" -g "$(id -gn)" /srv/daywish; fi; test -w /srv/daywish || { echo "::error title=部署目录无权限::alvis 无法创建或写入 /srv/daywish，请授权该目录或免密 sudo" >&2; exit 1; }; mkdir -p /srv/daywish/incoming && mktemp -d /srv/daywish/incoming/upload.XXXXXXXX')"
 [[ "$UPLOAD" =~ ^/srv/daywish/incoming/upload\.[A-Za-z0-9]+$ ]] || exit 2
 "${SCP[@]}" ops/deploy.py "$REMOTE:$UPLOAD/deploy.py"
 if [[ "$MODE" == site ]]; then

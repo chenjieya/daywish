@@ -13,6 +13,7 @@ on:
       - 'public/icon.png'
       - 'scripts/prepare-site.mjs'
       - 'ops/**'
+      - 'tests/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'tsconfig*.json'
