@@ -28,8 +28,13 @@ if [[ "$MODE" == site ]]; then
   "${SCP[@]}" "$PAYLOAD" "$REMOTE:$UPLOAD/site.tgz"
 else
   [[ -f "$RECORD" ]] || exit 2
-  "${SCP[@]}" "$PAYLOAD" "$REMOTE:$UPLOAD/package.bin"
   "${SCP[@]}" "$RECORD" "$REMOTE:$UPLOAD/record.json"
+  if [[ "${DEPLOY_TRANSFER:-https}" == scp ]]; then
+    "${SCP[@]}" "$PAYLOAD" "$REMOTE:$UPLOAD/package.bin"
+  else
+    "${SCP[@]}" ops/download-package.py "$REMOTE:$UPLOAD/download-package.py"
+    "${SSH[@]}" "$REMOTE" "python3 '$UPLOAD/download-package.py' '$UPLOAD/record.json' '$UPLOAD/package.bin'"
+  fi
   if [[ -n "$SITE_PAYLOAD" ]]; then
     [[ -f "$SITE_PAYLOAD" ]] || exit 2
     "${SCP[@]}" "$SITE_PAYLOAD" "$REMOTE:$UPLOAD/site.tgz"

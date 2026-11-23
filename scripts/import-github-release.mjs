@@ -37,6 +37,6 @@ for (const asset of assets) {
     record = { platform, version, file: asset.name, bytes, sha256, publishedAt: release.publishedAt, notes: release.body.split(/\r?\n/).map(s => s.replace(/^[-*#\s]+/, '').trim()).filter(Boolean) }
     if (!record.notes.length) record.notes = [`发布 ${platform} v${version}`]
   }
-  await writeFile(join(directory, `${platform}-${version}.record.json`), JSON.stringify(record, null, 2) + '\n')
+  await writeFile(join(directory, `${platform}-${version}.record.json`), JSON.stringify({ ...record, sourceTag: tag }, null, 2) + '\n')
 }
 console.log(`已验证 ${assets.length} 个安装包，准备同步官网`)

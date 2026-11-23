@@ -8,14 +8,17 @@ on:
         description: 需要同步的正式 Release 标签（同步失败可重试）
         required: true
         type: string
+  push:
+    tags: ['sync-windows-v*', 'sync-macos-v*']
 permissions:
   contents: read
+  actions: write
 concurrency:
   group: daywish-manual-release-sync
   cancel-in-progress: false
 jobs:
   sync:
-    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    if: github.event_name != 'release' || !github.event.release.prerelease
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -25,6 +28,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: 准备同步标签并取消相同标签的旧传输
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            [[ "$REQUESTED_TAG" =~ ^sync-((windows|macos)-v[0-9]+\.[0-9]+\.[0-9]+)(-[0-9]+)?$ ]]
+            TAG="${BASH_REMATCH[1]}"
+          else
+            TAG="$REQUESTED_TAG"
+          fi
+          [[ "$TAG" =~ ^[A-Za-z0-9._/-]+$ && "$TAG" != -* ]]
+          printf 'RELEASE_TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_EVENT_NAME" != release ]]; then
+            RUNS="$(gh run list --workflow release.yml --limit 20 --json databaseId,headBranch,status)"
+            for RUN in $(printf '%s' "$RUNS" | jq -r --arg tag "$TAG" '.[] | select(.headBranch == $tag and .status != "completed") | .databaseId'); do
+              gh run cancel "$RUN"
+            done
+            RUNS="$(gh run list --workflow sync-release.yml --limit 20 --json databaseId,headBranch,status)"
+            for RUN in $(printf '%s' "$RUNS" | jq -r --arg tag "$TAG" --argjson current "$GITHUB_RUN_ID" '.[] | select(.databaseId != $current and .status != "completed" and (.headBranch == ("sync-" + $tag) or (.headBranch | startswith("sync-" + $tag + "-")))) | .databaseId'); do
+              gh run cancel "$RUN"
+            done
+          fi
       - run: corepack enable && corepack prepare pnpm@10.28.0 --activate
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm site:build
@@ -32,7 +59,6 @@ jobs:
       - name: 下载并验证正式发布附件
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
         run: node scripts/import-github-release.mjs "$RELEASE_TAG" publication
       - name: 更新官网安装包与版本记录
         env:
