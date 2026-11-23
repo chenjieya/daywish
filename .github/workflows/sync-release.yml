@@ -34,7 +34,7 @@ jobs:
         env:
           DEPLOY_HOST: '152.136.107.93'
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'alvis' }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |

@@ -1,4 +1,8 @@
-﻿param([string]$SshAlias = 'nest_home_deploy')
+﻿param(
+  [Alias('SshAlias')][string]$SshTarget = 'alvis@152.136.107.93',
+  [string]$IdentityFile = (Join-Path $HOME '.ssh/nest_home_deploy'),
+  [int]$SshPort = 22
+)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
 function Invoke-Checked {
@@ -6,7 +10,10 @@ function Invoke-Checked {
   & $Program @Arguments
   if ($LASTEXITCODE -ne 0) { throw "$Program 执行失败，退出码 $LASTEXITCODE" }
 }
-# 使用调用者本人的 SSH 别名和密钥，不复制私钥，不修改宿主机 Nginx。
+# 使用调用者本人的部署密钥，不复制私钥，不修改宿主机 Nginx。
+if (-not (Test-Path -LiteralPath $IdentityFile -PathType Leaf)) { throw "无法读取部署私钥：$IdentityFile" }
+$sshOptions = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-p', "$SshPort", '-i', $IdentityFile)
+$scpOptions = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-P', "$SshPort", '-i', $IdentityFile)
 Invoke-Checked 'pnpm.cmd' @('site:build')
 New-Item -ItemType Directory -Force .cache/website-delivery | Out-Null
 Invoke-Checked 'tar.exe' @('-czf', '.cache/website-delivery/site.tgz', '-C', 'website-dist', '.')
@@ -18,12 +25,12 @@ if ((Get-FileHash -Algorithm SHA256 -LiteralPath $package).Hash.ToLowerInvariant
 $recordPath = '.cache/website-delivery/record.json'
 $record | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 $recordPath
 # Windows PowerShell UTF8 会带 BOM；Python 用 utf-8-sig 读取版本记录。
-$upload = & ssh -o BatchMode=yes $SshAlias 'mkdir -p /srv/daywish/incoming && mktemp -d /srv/daywish/incoming/bootstrap.XXXXXXXX'
+$upload = & ssh @sshOptions $SshTarget 'if [ ! -d /srv/daywish ]; then sudo -n install -d -m 755 -o "$(id -un)" -g "$(id -gn)" /srv/daywish; fi; test -w /srv/daywish || exit 1; mkdir -p /srv/daywish/incoming && mktemp -d /srv/daywish/incoming/bootstrap.XXXXXXXX'
 if ($LASTEXITCODE -ne 0 -or $upload -notmatch '^/srv/daywish/incoming/bootstrap\.[A-Za-z0-9]+$') { throw '无法建立服务器上传目录' }
-Invoke-Checked 'scp' @('ops/deploy.py', 'ops/bootstrap.sh', 'ops/compose.yml', 'ops/nginx-site.conf', "${SshAlias}:$upload/")
-Invoke-Checked 'scp' @('.cache/website-delivery/site.tgz', "${SshAlias}:$upload/site.tgz")
-Invoke-Checked 'scp' @($recordPath, "${SshAlias}:$upload/record.json")
-Invoke-Checked 'scp' @($package, "${SshAlias}:$upload/package.bin")
-Invoke-Checked 'ssh' @('-o', 'BatchMode=yes', $SshAlias, "bash '$upload/bootstrap.sh'")
+Invoke-Checked 'scp' ($scpOptions + @('ops/deploy.py', 'ops/bootstrap.sh', 'ops/compose.yml', 'ops/nginx-site.conf', "${SshTarget}:$upload/"))
+Invoke-Checked 'scp' ($scpOptions + @('.cache/website-delivery/site.tgz', "${SshTarget}:$upload/site.tgz"))
+Invoke-Checked 'scp' ($scpOptions + @($recordPath, "${SshTarget}:$upload/record.json"))
+Invoke-Checked 'scp' ($scpOptions + @($package, "${SshTarget}:$upload/package.bin"))
+Invoke-Checked 'ssh' ($sshOptions + @($SshTarget, "bash '$upload/bootstrap.sh'"))
 Invoke-Checked 'curl.exe' @('--fail', '--silent', '--show-error', 'https://daywish.alvis.org.cn/healthz')
 Write-Output '部署完成：https://daywish.alvis.org.cn'
