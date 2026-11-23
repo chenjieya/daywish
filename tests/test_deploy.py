@@ -1,13 +1,22 @@
 import io
 import json
+import hashlib
+import importlib.util
 import os
 from pathlib import Path
 import tarfile
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 from urllib.error import URLError
 from ops.deploy import checksum, publish_package, extract_site, publish_site, validate_record, initialize_manifest, deployment_lock
+
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'ops'))
+spec = importlib.util.spec_from_file_location('download_package', Path(__file__).resolve().parents[1] / 'ops/download-package.py')
+downloader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(downloader)
 
 
 class DeployTests(unittest.TestCase):
@@ -23,6 +32,45 @@ class DeployTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             publish_package(self.root, self.payload, {**self.record, 'sha256': '0' * 64})
         self.assertFalse((self.root / 'state/releases.json').exists())
+
+    def test_parallel_ranges_retry_and_verify_entire_file(self):
+        payload = b'content-for-package-' * 1000
+        record = {**self.record, 'bytes': len(payload), 'sha256': hashlib.sha256(payload).hexdigest()}
+        attempts = {}
+        lock = threading.Lock()
+        class Response(io.BytesIO):
+            status = 206
+            url = 'https://release-assets.githubusercontent.com/test'
+        def source(request, timeout):
+            value = request.get_header('Range').removeprefix('bytes=')
+            start, end = map(int, value.split('-'))
+            with lock:
+                attempts[value] = attempts.get(value, 0) + 1
+                if start == 1024 and attempts[value] == 1:
+                    raise TimeoutError('temporary failure')
+            response = Response(payload[start:end + 1])
+            response.headers = {'Content-Range': f'bytes {start}-{end}/{len(payload)}'}
+            return response
+        destination = self.root / 'verified.exe'
+        with patch.object(downloader, 'urlopen', side_effect=source):
+            downloader.download_ranges('https://github.com/test', destination, record, workers=4, chunk_size=1024)
+        self.assertEqual(destination.read_bytes(), payload)
+        self.assertEqual(attempts['1024-2047'], 2)
+
+    def test_download_hash_mismatch_never_publishes_file(self):
+        class Response(io.BytesIO):
+            status = 206
+            url = 'https://release-assets.githubusercontent.com/test'
+        def source(request, timeout):
+            start, end = map(int, request.get_header('Range').removeprefix('bytes=').split('-'))
+            response = Response(b'x' * (end - start + 1))
+            response.headers = {'Content-Range': f'bytes {start}-{end}/{self.record["bytes"]}'}
+            return response
+        destination = self.root / 'never.exe'
+        with patch.object(downloader, 'urlopen', side_effect=source):
+            with self.assertRaises(ValueError):
+                downloader.download_ranges('https://github.com/test', destination, self.record, workers=2, chunk_size=8)
+        self.assertFalse(destination.exists())
 
     def test_first_site_deploy_has_no_fake_download_and_keeps_existing_releases(self):
         initialize_manifest(self.root)

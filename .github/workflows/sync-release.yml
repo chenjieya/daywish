@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
+    timeout-minutes: 30
     if: github.event_name != 'release' || !github.event.release.prerelease
     runs-on: ubuntu-latest
     environment: production

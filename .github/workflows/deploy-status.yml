@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ['.github/workflows/deploy-status.yml']
+    tags: ['status-*']
 permissions:
   contents: read
 jobs:
@@ -38,6 +39,10 @@ jobs:
           if files:
               latest = max(files, key=lambda p: p.stat().st_mtime)
               print('::notice title=安装包上传进度::最近安装包已写入 ' + str(latest.stat().st_size) + ' 字节')
+          progress = list((root / 'incoming').glob('*/download-progress.json'))
+          if progress:
+              latest = max(progress, key=lambda p: p.stat().st_mtime)
+              print('::notice title=官方分段下载进度::' + json.dumps(json.loads(latest.read_text(encoding='utf-8')), ensure_ascii=True))
           manifest = root / 'state/releases.json'
           if manifest.is_file():
               data = json.loads(manifest.read_text(encoding='utf-8'))
