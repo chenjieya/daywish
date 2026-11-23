@@ -1,0 +1,47 @@
+name: 检查官网下载与上传进度
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/deploy-status.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: 只读检查官网目录和安装包传输进度
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'alvis' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_USER" =~ ^[A-Za-z0-9_-]+$ && "$DEPLOY_PORT" =~ ^[0-9]+$ ]]
+          TMP="$(mktemp -d)"
+          trap 'rm -rf -- "$TMP"' EXIT
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$TMP/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$TMP/known_hosts"
+          ssh -i "$TMP/key" -p "$DEPLOY_PORT" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$TMP/known_hosts" "$DEPLOY_USER@152.136.107.93" 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          import shutil
+          root = Path('/srv/daywish')
+          if not root.is_dir():
+              print('::notice title=官网目录::尚未初始化')
+              raise SystemExit(0)
+          files = list((root / 'incoming').glob('*/package.bin'))
+          if files:
+              latest = max(files, key=lambda p: p.stat().st_mtime)
+              print('::notice title=安装包上传进度::最近安装包已写入 ' + str(latest.stat().st_size) + ' 字节')
+          manifest = root / 'state/releases.json'
+          if manifest.is_file():
+              data = json.loads(manifest.read_text(encoding='utf-8'))
+              versions = [{'platform': r.get('platform'), 'version': r.get('version'), 'bytes': r.get('bytes')} for r in data.get('releases', [])]
+              print('::notice title=官网下载清单::' + json.dumps(versions, ensure_ascii=True))
+          print('::notice title=部署磁盘空间::剩余 ' + str(shutil.disk_usage(root).free // 1024 // 1024) + ' MB')
+          PY
