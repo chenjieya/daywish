@@ -52,7 +52,11 @@ function restorePosition(saved?: { x: number; y: number }): void {
   const area = screen.getDisplayMatching({ ...candidate, width: bounds.width, height: bounds.height }).workArea
   win.setPosition(Math.round(Math.max(area.x, Math.min(candidate.x, area.x + area.width - bounds.width))), Math.round(Math.max(area.y, Math.min(candidate.y, area.y + area.height - bounds.height))))
 }
-function show(): void { win?.show(); win?.focus() }
+function show(): void {
+  if (win?.isMinimized()) win.restore()
+  win?.show()
+  win?.focus()
+}
 async function finishQuit(): Promise<void> {
   if (quitting) return
   quitting = true
@@ -121,7 +125,7 @@ function createWindow(): void {
     ...initialSize, useContentSize: true, frame: false, transparent: false, roundedCorners: true,
     backgroundMaterial: acrylic ? 'acrylic' : 'none',
     backgroundColor: acrylic ? '#00000000' : '#f2f5f7', resizable: false, maximizable: false, fullscreenable: false,
-    show: false, title: '好日将至', icon: join(root, 'dist/icon.png'),
+    show: false, skipTaskbar: true, title: '好日将至', icon: join(root, 'dist/icon.png'),
     webPreferences: { preload: join(root, 'dist-electron/desktop/preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: true, spellcheck: false },
   })
   const area = screen.getPrimaryDisplay().workArea
@@ -133,7 +137,10 @@ function createWindow(): void {
   win.setMenu(null)
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', event => event.preventDefault())
-  win.once('ready-to-show', show)
+  win.once('ready-to-show', () => {
+    // 默认驻留托盘；托盘不可用时显示窗口，保留可操作的入口。
+    if (!tray) { win?.setSkipTaskbar(false); show() }
+  })
   if (process.platform === 'win32') win.hookWindowMessage(0x001e, () => win?.webContents.send('refresh-date'))
   win.on('close', event => { if (!quitting && tray) { event.preventDefault(); win?.hide() } })
   win.on('move', () => {
