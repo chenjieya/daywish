@@ -16,11 +16,12 @@ final class SoftwareUpdater: ObservableObject {
         controller.updater.publisher(for: \.automaticallyChecksForUpdates).assign(to: &$automatic)
     }
     func start() {
-        guard ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] != "1" else { return }
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String, Data(base64Encoded: key)?.count == 32 else {
             message = "更新公钥未配置，请使用完整发布版。"
             return
         }
+        // CI 验证真实更新器初始化，避免首次发布前请求尚不存在的更新源。
+        if ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] == "1" { controller.updater.automaticallyChecksForUpdates = false }
         controller.startUpdater()
     }
     func setAutomatic(_ enabled: Bool) { controller.updater.automaticallyChecksForUpdates = enabled }

@@ -47,7 +47,8 @@ jobs:
           if (ref.startsWith('refs/tags/') && ref.slice(10) !== `${platform}-v${version}`) throw new Error('标签必须与 package.json 版本及平台一致')
           const history = JSON.parse(fs.readFileSync('website/public/releases.json', 'utf8'))
           const known = history.releases.find(r => r.platform === platform && r.version === version)
-          const notes = process.env.RELEASE_NOTES?.trim() || known?.notes.join('\n') || `发布 ${platform} v${version}`
+          const notesPath = `.github/release-notes/${platform}-${version}.txt`
+          const notes = process.env.RELEASE_NOTES?.trim() || (fs.existsSync(notesPath) ? fs.readFileSync(notesPath, 'utf8').trim() : known?.notes.join('\n')) || `发布 ${platform} v${version}`
           fs.writeFileSync('release-notes.txt', notes)
           NODE
       - run: pnpm test

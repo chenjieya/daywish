@@ -81,7 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showWindow()
         model.softwareUpdates.start()
         if ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] == "1" {
-            FileHandle.standardOutput.write(Data("DAYWISH_READY: resources and native window initialized\n".utf8))
+            guard model.softwareUpdates.canCheck else {
+                FileHandle.standardError.write(Data("error: Sparkle 更新器初始化未完成\n".utf8))
+                NSApp.terminate(nil)
+                return
+            }
+            FileHandle.standardOutput.write(Data("DAYWISH_READY: resources, native window and Sparkle initialized\n".utf8))
         }
     }
     @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); model?.refresh() }

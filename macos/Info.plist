@@ -17,7 +17,7 @@
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUAutomaticallyUpdate</key><false/>
   <key>SUAllowsAutomaticUpdates</key><false/>
-  <key>SUUpdateCheckInterval</key><integer>86400</integer>
+  <key>SUScheduledCheckInterval</key><integer>86400</integer>
   <key>SUPromptUserOnFirstLaunch</key><false/>
   <key>SUVerifyUpdateBeforeExtraction</key><true/>
 </dict></plist>
