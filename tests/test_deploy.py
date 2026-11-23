@@ -5,7 +5,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from ops.deploy import checksum, publish_package, extract_site, publish_site, validate_record
+from ops.deploy import checksum, publish_package, extract_site, publish_site, validate_record, initialize_manifest
 
 
 class DeployTests(unittest.TestCase):
@@ -21,6 +21,14 @@ class DeployTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             publish_package(self.root, self.payload, {**self.record, 'sha256': '0' * 64})
         self.assertFalse((self.root / 'state/releases.json').exists())
+
+    def test_first_site_deploy_has_no_fake_download_and_keeps_existing_releases(self):
+        initialize_manifest(self.root)
+        state = self.root / 'state/releases.json'
+        self.assertEqual(json.loads(state.read_text(encoding='utf-8'))['releases'], [])
+        publish_package(self.root, self.payload, self.record)
+        initialize_manifest(self.root)
+        self.assertEqual(json.loads(state.read_text(encoding='utf-8'))['releases'], [self.record])
 
     def test_package_precedes_manifest_and_retry_is_idempotent(self):
         publish_package(self.root, self.payload, self.record)

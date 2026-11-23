@@ -39,6 +39,11 @@ jobs:
         run: pnpm package:win
       - if: inputs.platform == 'macos'
         run: bash macos/build.command
+      - name: 构建随客户端一起发布的官网
+        run: |
+          pnpm site:build
+          mkdir -p publication
+          tar -czf publication/site.tgz -C website-dist .
       - name: 生成经过校验的版本记录
         env:
           PLATFORM: ${{ inputs.platform }}
@@ -85,4 +90,4 @@ jobs:
         run: |
           set -euo pipefail
           FILE="$(python3 -c 'import json;print(json.load(open("publication/record.json"))["file"])')"
-          bash ops/deploy-remote.sh release "publication/$FILE" publication/record.json
+          bash ops/deploy-remote.sh release "publication/$FILE" publication/record.json publication/site.tgz

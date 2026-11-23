@@ -50,7 +50,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: daywish-website
-      - name: 上传并原子切换官网
+      - name: 初始化服务并部署官网（由 GitHub Actions 连接服务器）
         env:
           DEPLOY_HOST: '152.136.107.93'
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}

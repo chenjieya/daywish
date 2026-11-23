@@ -55,6 +55,14 @@ def atomic_json(path, value):
     os.replace(temporary, path)
 
 
+def initialize_manifest(root):
+    """首次上线不伪造安装包；已有版本记录保持不变。"""
+    manifest = root / 'state/releases.json'
+    if not manifest.exists():
+        atomic_json(manifest, {'schema': 1, 'releases': []})
+    manifest.parent.chmod(0o755)
+
+
 @contextmanager
 def deployment_lock(root):
     # Linux 发布端使用 flock，避免官网和双平台安装包同时发布时互相覆盖。
@@ -164,6 +172,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', default='/srv/daywish')
     commands = parser.add_subparsers(dest='command', required=True)
+    commands.add_parser('init')
     site = commands.add_parser('site')
     site.add_argument('archive')
     site.add_argument('--probe', default='')
@@ -176,7 +185,10 @@ def main():
     if root == Path(root.anchor):
         raise ValueError('禁止使用文件系统根目录')
     with deployment_lock(root):
-        if args.command == 'site':
+        if args.command == 'init':
+            initialize_manifest(root)
+            print('版本清单已就绪，保留已有发布记录')
+        elif args.command == 'site':
             print('站点已切换：' + publish_site(root, args.archive, args.probe))
         elif args.command == 'release':
             publish_package(root, args.package, json.loads(Path(args.record).read_text(encoding='utf-8-sig')))
