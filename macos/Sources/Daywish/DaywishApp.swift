@@ -78,8 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         displayObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.keepOnScreen() }
         }
-        // 启动后驻留菜单栏，通过菜单显式打开窗口。
-        panel.orderOut(nil)
+        // 启动即显示桌面面板，不激活应用；菜单栏驻留且不显示 Dock 图标。
+        panel.orderFront(nil)
         model.softwareUpdates.start()
         if ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] == "1" {
             guard model.softwareUpdates.canCheck else {

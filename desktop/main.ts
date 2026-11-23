@@ -133,13 +133,15 @@ function createWindow(): void {
   restorePosition(position ?? { x: area.x + area.width - bounds.width - 20, y: area.y + area.height - bounds.height - 20 })
   applySettings()
   win.webContents.setZoomFactor(1)
-  void win.webContents.setVisualZoomLevelLimits(1, 1)
   win.setMenu(null)
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', event => event.preventDefault())
   win.once('ready-to-show', () => {
-    // 默认驻留托盘；托盘不可用时显示窗口，保留可操作的入口。
-    if (!tray) { win?.setSkipTaskbar(false); show() }
+    // 初始导航完成后再访问页面 frame，避免锁定缩放时 frame 已被替换。
+    void win?.webContents.setVisualZoomLevelLimits(1, 1).catch(error => console.error('无法锁定窗口缩放', error))
+    // 桌面面板保持可见，后台驻留不抢焦点；托盘不可用时保留任务栏入口。
+    if (!tray) { win?.setSkipTaskbar(false); show(); return }
+    win?.showInactive()
   })
   if (process.platform === 'win32') win.hookWindowMessage(0x001e, () => win?.webContents.send('refresh-date'))
   win.on('close', event => { if (!quitting && tray) { event.preventDefault(); win?.hide() } })
