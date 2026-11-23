@@ -5,7 +5,9 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from ops.deploy import checksum, publish_package, extract_site, publish_site, validate_record, initialize_manifest
+from unittest.mock import patch
+from urllib.error import URLError
+from ops.deploy import checksum, publish_package, extract_site, publish_site, validate_record, initialize_manifest, deployment_lock
 
 
 class DeployTests(unittest.TestCase):
@@ -79,11 +81,14 @@ class DeployTests(unittest.TestCase):
                 info = tarfile.TarInfo(name)
                 info.size = len(value)
                 tar.addfile(info, io.BytesIO(value))
-        publish_site(self.root, archive, '')
-        previous = os.readlink(self.root / 'current')
-        with self.assertRaises(Exception):
-            publish_site(self.root, archive, 'http://127.0.0.1:1')
-        self.assertEqual(os.readlink(self.root / 'current'), previous)
+        # TemporaryDirectory 在 Linux 默认是 700；使用与真实 CLI 一致的锁入口归一化权限。
+        with deployment_lock(self.root):
+            publish_site(self.root, archive, '')
+            previous = os.readlink(self.root / 'current')
+            with patch('ops.deploy.urlopen', side_effect=URLError('probe failed')):
+                with self.assertRaises(URLError):
+                    publish_site(self.root, archive, 'http://127.0.0.1:8085')
+            self.assertEqual(os.readlink(self.root / 'current'), previous)
 
 
 if __name__ == '__main__':
