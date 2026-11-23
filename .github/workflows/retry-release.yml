@@ -1,0 +1,69 @@
+name: 重试已构建版本的发布
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: package 已成功、publish 失败的发布流水线编号
+        required: true
+        type: string
+  push:
+    tags: ['retry-run-*']
+permissions:
+  contents: read
+  actions: write
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 校验原流水线并仅重试失败任务
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED_RUN: ${{ inputs.run_id || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN="${REQUESTED_RUN#retry-run-}"
+          [[ "$RUN" =~ ^[0-9]+$ ]]
+          printf '%s' "$RUN" > "$RUNNER_TEMP/retry-run-id"
+          gh api "repos/$GH_REPO/actions/runs/$RUN" > "$RUNNER_TEMP/retry-context.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads((Path(os.environ['RUNNER_TEMP']) / 'retry-context.json').read_text())
+          assert data['path'] == '.github/workflows/release.yml', '只允许重试正式客户端发布工作流'
+          assert data['head_repository']['full_name'] == os.environ['GH_REPO'], '不接受外部仓库'
+          assert data['status'] == 'completed' and data['conclusion'] == 'failure', '原工作流必须已失败结束'
+          PY
+          gh api "repos/$GH_REPO/actions/runs/$RUN/jobs" > "$RUNNER_TEMP/retry-jobs.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          jobs = json.loads((Path(os.environ['RUNNER_TEMP']) / 'retry-jobs.json').read_text())['jobs']
+          assert any(job['name'] == 'package' and job['conclusion'] == 'success' for job in jobs), '必须已有通过测试的构建产物'
+          assert any(job['name'] == 'publish' and job['conclusion'] == 'failure' for job in jobs), '只重试发布失败'
+          PY
+          gh run rerun "$RUN" --failed
+          gh run watch "$RUN" --exit-status --interval 10
+      - name: 输出发布错误摘要
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          RUN="$(cat "$RUNNER_TEMP/retry-run-id")"
+          gh run view "$RUN" --log-failed > "$RUNNER_TEMP/retry-failure.log" || true
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          count = 0
+          for line in (Path(os.environ['RUNNER_TEMP']) / 'retry-failure.log').read_text(errors='replace').splitlines():
+              if ('Error:' in line or 'AssertionError' in line) and not any(word in line.lower() for word in ['private key', 'token', 'authorization', 'encrypted']):
+                  message = line[-800:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print('::error title=客户端发布重试失败::' + message)
+                  count += 1
+                  if count >= 5:
+                      break
+          PY
