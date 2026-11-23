@@ -7,7 +7,7 @@ on:
         required: true
         type: string
   push:
-    tags: ['retry-run-*']
+    tags: ['retry-run-*', 'inspect-run-*']
 permissions:
   contents: read
   actions: write
@@ -25,8 +25,10 @@ jobs:
         run: |
           set -euo pipefail
           RUN="${REQUESTED_RUN#retry-run-}"
+          RUN="${RUN#inspect-run-}"
           [[ "$RUN" =~ ^[0-9]+$ ]]
           printf '%s' "$RUN" > "$RUNNER_TEMP/retry-run-id"
+          if [[ "$REQUESTED_RUN" == inspect-run-* ]]; then exit 0; fi
           gh api "repos/$GH_REPO/actions/runs/$RUN" > "$RUNNER_TEMP/retry-context.json"
           python3 - <<'PY'
           import json, os
@@ -47,7 +49,7 @@ jobs:
           gh run rerun "$RUN" --failed
           gh run watch "$RUN" --exit-status --interval 10
       - name: 输出发布错误摘要
-        if: failure()
+        if: failure() || startsWith(github.ref_name, 'inspect-run-')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -60,7 +62,7 @@ jobs:
           from pathlib import Path
           count = 0
           for line in (Path(os.environ['RUNNER_TEMP']) / 'retry-failure.log').read_text(errors='replace').splitlines():
-              if ('Error:' in line or 'AssertionError' in line) and not any(word in line.lower() for word in ['private key', 'token', 'authorization', 'encrypted']):
+              if '\t发布 GitHub Release\t' in line and any(word in line for word in ['Error:', 'AssertionError', 'stderr:', 'HTTP 4', 'HTTP 5']) and not any(word in line.lower() for word in ['private key', 'token', 'authorization', 'encrypted']):
                   message = line[-800:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
                   print('::error title=客户端发布重试失败::' + message)
                   count += 1
