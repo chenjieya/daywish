@@ -1,0 +1,22 @@
+name: 验证 Windows 真实更新下载
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/update-smoke.yml', 'scripts/verify-windows-update.cjs']
+permissions:
+  contents: read
+jobs:
+  download:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - shell: bash
+        run: corepack enable && corepack prepare pnpm@10.28.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: 验证正式更新源与实际安装包下载
+        run: node scripts/verify-windows-update.cjs
