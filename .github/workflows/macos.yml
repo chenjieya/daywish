@@ -1,15 +1,40 @@
 name: 验证与构建 Mac 原生版
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['macos/**', 'shared/**', '.github/workflows/macos.yml', 'scripts/annotate-swift.py']
 permissions:
   contents: read
 jobs:
   macos:
-    runs-on: macos-latest
+    runs-on: xcode-27
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: 检查构建环境
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
       - name: 测试并构建本机架构应用
-        run: bash macos/build.command
+        shell: bash
+        env:
+          DAYWISH_SMOKE_TEST: '1'
+        run: |
+          set +e
+          bash macos/build.command 2>&1 | tee macos-build.log
+          RESULT=${PIPESTATUS[0]}
+          set -e
+          python3 scripts/annotate-swift.py macos-build.log
+          exit "$RESULT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Daywish-macOS-build-log
+          path: macos-build.log
       - uses: actions/upload-artifact@v4
         with:
           name: Daywish-macOS
           path: macos/build/*.zip
+          if-no-files-found: error

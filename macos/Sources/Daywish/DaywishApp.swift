@@ -78,6 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             Task { @MainActor in self?.keepOnScreen() }
         }
         showWindow()
+        if ProcessInfo.processInfo.environment["DAYWISH_SMOKE_TEST"] == "1" {
+            FileHandle.standardOutput.write(Data("DAYWISH_READY: resources and native window initialized\n".utf8))
+        }
     }
     @objc private func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); model?.refresh() }
     @objc private func openSettings() { model?.panel = "settings"; showWindow() }

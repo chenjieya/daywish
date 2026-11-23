@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    runs-on: ${{ (inputs.platform == 'macos' || startsWith(github.ref_name, 'macos-v')) && 'macos-latest' || 'windows-latest' }}
+    runs-on: ${{ (inputs.platform == 'macos' || startsWith(github.ref_name, 'macos-v')) && 'xcode-27' || 'windows-latest' }}
     defaults:
       run:
         shell: bash
@@ -53,7 +53,15 @@ jobs:
       - if: env.RELEASE_PLATFORM == 'windows'
         run: pnpm package:win
       - if: env.RELEASE_PLATFORM == 'macos'
-        run: bash macos/build.command
+        env:
+          DAYWISH_SMOKE_TEST: '1'
+        run: |
+          set +e
+          bash macos/build.command 2>&1 | tee macos-build.log
+          RESULT=${PIPESTATUS[0]}
+          set -e
+          python3 scripts/annotate-swift.py macos-build.log
+          exit "$RESULT"
       - name: 构建随客户端一起发布的官网
         run: |
           pnpm site:build

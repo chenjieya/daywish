@@ -43,6 +43,25 @@ done
 # 本地临时签名免费，不是 Developer ID 签名或 Apple 公证。
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
+if [[ "${DAYWISH_SMOKE_TEST:-0}" == 1 ]]; then
+  "$APP/Contents/MacOS/Daywish" > build/launch.log 2>&1 &
+  SMOKE_PID=$!
+  trap 'kill -TERM "$SMOKE_PID" 2>/dev/null || true' EXIT
+  READY=0
+  for attempt in $(seq 1 20); do
+    if grep -q 'DAYWISH_READY:' build/launch.log; then READY=1; break; fi
+    if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi
+    sleep 0.5
+  done
+  kill -TERM "$SMOKE_PID" 2>/dev/null || true
+  wait "$SMOKE_PID" 2>/dev/null || true
+  trap - EXIT
+  cat build/launch.log
+  if [[ "$READY" != 1 ]]; then
+    echo '::error title=Mac 启动检查失败::应用未完成资源加载与原生窗口初始化'
+    exit 1
+  fi
+fi
 ditto -c -k --sequesterRsrc --keepParent "$APP" "build/Daywish-$VERSION-macOS-$(uname -m).zip"
 echo "构建完成：$APP"
 echo "将应用拖入“应用程序”。首次打开如被拦截，到“隐私与安全性”选择“仍要打开”。"
