@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             // Monterey 至 Sequoia 使用系统磨砂，避免加载旧系统不存在的玻璃类型。
             let effect = NSVisualEffectView(frame: frame)
+            effect.appearance = NSAppearance(named: .aqua)
             effect.material = .popover
             effect.blendingMode = .behindWindow
             effect.state = .active
