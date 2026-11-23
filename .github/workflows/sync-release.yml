@@ -14,11 +14,14 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: daywish-manual-release-sync
-  cancel-in-progress: false
+  group: daywish-download-sync-${{ (startsWith(inputs.tag || github.event.release.tag_name || github.ref_name, 'macos-') || startsWith(inputs.tag || github.event.release.tag_name || github.ref_name, 'sync-macos-')) && 'macos' || 'windows' }}
+  cancel-in-progress: true
 jobs:
   sync:
     timeout-minutes: 30
+    concurrency:
+      group: daywish-production-deploy
+      cancel-in-progress: false
     if: github.event_name != 'release' || !github.event.release.prerelease
     runs-on: ubuntu-latest
     environment: production
@@ -46,11 +49,11 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" != release ]]; then
             RUNS="$(gh run list --workflow release.yml --limit 20 --json databaseId,headBranch,status)"
             for RUN in $(printf '%s' "$RUNS" | jq -r --arg tag "$TAG" '.[] | select(.headBranch == $tag and .status != "completed") | .databaseId'); do
-              gh run cancel "$RUN"
+              gh run cancel "$RUN" || true
             done
             RUNS="$(gh run list --workflow sync-release.yml --limit 20 --json databaseId,headBranch,status)"
-            for RUN in $(printf '%s' "$RUNS" | jq -r --arg tag "$TAG" --argjson current "$GITHUB_RUN_ID" '.[] | select(.databaseId != $current and .status != "completed" and (.headBranch == ("sync-" + $tag) or (.headBranch | startswith("sync-" + $tag + "-")))) | .databaseId'); do
-              gh run cancel "$RUN"
+            for RUN in $(printf '%s' "$RUNS" | jq -r --arg tag "$TAG" --argjson current "$GITHUB_RUN_ID" '.[] | select(.databaseId < $current and .status != "completed" and (.headBranch == ("sync-" + $tag) or (.headBranch | startswith("sync-" + $tag + "-")))) | .databaseId'); do
+              gh run cancel "$RUN" || true
             done
           fi
       - run: corepack enable && corepack prepare pnpm@10.28.0 --activate
